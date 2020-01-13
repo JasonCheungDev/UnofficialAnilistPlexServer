@@ -1,0 +1,26 @@
+body {
+  /* padding: 50px; */
+  font: 14px "Roboto", "Lucida Grande", Helvetica, Arial, sans-serif;
+  color: rgb(207, 213, 220);
+}
+
+a {
+  /* color: #00B7FF; */
+  color: rgb(207, 213, 220)
+}
+
+.header-strip {
+  color: rgb(207, 213, 220);
+  background-color: #1f2631;
+  padding: 16px;
+}
+
+button {
+  margin: 10px;
+  border-radius: 3px;
+  border: none;
+  height: 35px;
+  width: 165px;
+  color: white;
+  background-color: rgb(61,180,242)
+}
