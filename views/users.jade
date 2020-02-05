@@ -6,14 +6,10 @@ html
     link(href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet")
   body
     .header-strip
-      h1="Xaieon"
+      h1="All Users"
     
     .body-container
-      .primary-text
-        h2="Anime List"
-
       .highlight-text
-        each item in animes
-          li=item.title
-      
-      button(onclick="onUpdateButtonClick()") Update
+        each item in users
+          li=item.username
+          button(onclick="onGenericButtonClick(\"/removeuser/" + item.username + "\")") Remove

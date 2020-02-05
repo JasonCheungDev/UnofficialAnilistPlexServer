@@ -10,6 +10,7 @@ var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 
 var app = express();
+const port = 3000
 
 // initialize module
 aniDownloader.loadData();
@@ -25,7 +26,9 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
-app.use('/users', usersRouter);
+// app.use('/users', usersRouter);
+
+
 
 app.get('/test', function(request, resource) {
   resource.render('test', {
@@ -35,9 +38,26 @@ app.get('/test', function(request, resource) {
 })
 
 app.get('/user', function(request, resource) {
+  console.log(aniDownloader.getData())
   resource.render('user', {
-
+    animes: aniDownloader.getData().animes
   })
+})
+
+app.get('/users', function(request, resource) {
+  resource.render('users', {
+    users: aniDownloader.getData().users
+  })
+})
+
+app.put('/removeuser/:username', function(request, resource) {
+  let username = request.params.username
+  console.log(`REMOVING USER ${username}`)
+})
+
+app.put('/adduser/:username', function(request, resource) {
+  let username = request.params.username
+  console.log(`ADDING USER ${username}`)
 })
 
 app.put('/update', function(request, resource) {
@@ -70,5 +90,7 @@ process.on(`SIGINT`, async function() {
   await aniDownloader.saveData()
   process.exit() // listening for SIGINT will keep the server alive (probably b/c the console is still open)
 })
+
+app.listen(port, () => console.log(`Example app listening on port ${port}!`))
 
 module.exports = app;

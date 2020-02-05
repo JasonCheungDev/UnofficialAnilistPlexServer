@@ -1,5 +1,18 @@
 extends layout
 
 block content
-  h1= title
-  p Welcome to #{title}
+  .header-strip
+    h1= title
+  
+  .body-container
+    .primary-text
+      p Welcome to Jason's AniList Plex Media Server
+      p Enter your username to automatically download your "Watch" list!
+    
+    .landing-left
+      p Register your a(href="https://anilist.co/") username to automatically download your "Watch" list
+      input(type="text", placeholder="username")
+      button Register
+
+    .landing-right
+      p Download Plex and watch your (and others) animes!

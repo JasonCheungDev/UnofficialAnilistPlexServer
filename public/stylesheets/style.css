@@ -1,7 +1,9 @@
 body {
-  /* padding: 50px; */
+  margin: 0;
+  padding: 0;
   font: 14px "Roboto", "Lucida Grande", Helvetica, Arial, sans-serif;
   color: rgb(207, 213, 220);
+  background-color: rgb(237,241,245);
 }
 
 a {
@@ -15,6 +17,14 @@ a {
   padding: 16px;
 }
 
+.body-container {
+  width: 800px;
+  margin: 1em auto;
+  padding: 1em;
+  background-color: white;
+  border-radius: 5px;
+}
+
 button {
   margin: 10px;
   border-radius: 3px;
@@ -22,5 +32,14 @@ button {
   height: 35px;
   width: 165px;
   color: white;
-  background-color: rgb(61,180,242)
+  background-color: rgb(61,180,242);
+  font: 14px "Roboto", "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+.highlight-text {
+  color: rgb(61, 180, 242)
+}
+
+.primary-text {
+  color: rgb(92, 114, 138)
 }
