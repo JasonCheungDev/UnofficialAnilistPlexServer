@@ -1,15 +1,34 @@
-html
-  head
-    title="User - Xaieon"
-    script(src="/javascripts/user.js")
-    link(href="/stylesheets/style.css" rel="stylesheet")
-    link(href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet")
-  body
-    .header-strip
-      h1="All Users"
-    
-    .body-container
-      .highlight-text
+extends layout_with_header
+
+block content
+  .body-container(style={"background-color": "transparent"})
+    h3.primary-text Add User
+    form(method='POST' action='/add_anilist_user')
+      input#username.text-input(type='text', placeholder='username' name='username')
+      input(type='hidden' value='/users' name='redirect')
+      button(type='submit') Register
+  
+  .body-container
+    h3.primary-text Last Updated
+    .body-container-contents
+      p 2:00pm
+
+  .body-container
+    h3.primary-text User List
+    .body-container-contents
+      table(style={'width': `100%`})
         each item in users
-          li=item.username
-          button(onclick="onGenericButtonClick(\"/removeuser/" + item.username + "\")") Remove
+          tr
+            form(method='POST' action='/remove_anilist_user')
+              td
+                p.highlight-text=item.username
+              input(type='hidden' value=item.username name='username')
+              td(style={'text-align': 'right'})
+                button.entry-right(type='submit') Remove
+
+        //- div.entry
+        //-   form(method='POST' action='/remove_anilist_user')
+        //-     p.entry-left=item.username
+        //-     input(type='hidden' value=item.username name='username')
+        //-     button.entry-right(type='submit') Remove
+        //-   //-button(onclick="onGenericButtonClick(\"/removeuser/" + item.username + "\")") Remove

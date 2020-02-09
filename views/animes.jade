@@ -1,0 +1,10 @@
+extends layout_with_header
+
+block content
+  .body-container
+    h3.primary-text Anime List
+    .body-container-contents
+      .highlight-text
+        each item in animes
+          li=item.title
+      button(onclick="onUpdateButtonClick()") Update

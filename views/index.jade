@@ -1,18 +1,44 @@
 extends layout
 
 block content
-  .header-strip
-    h1= title
+  //- .header-strip
+  .landing-header
+    .landing-navbar-left
+      h1= title
+    .landing-navbar-right
+      a(href="/users") Users
+      a(href="/animes") Animes
   
-  .body-container
-    .primary-text
-      p Welcome to Jason's AniList Plex Media Server
-      p Enter your username to automatically download your "Watch" list!
-    
-    .landing-left
-      p Register your a(href="https://anilist.co/") username to automatically download your "Watch" list
-      input(type="text", placeholder="username")
-      button Register
+  //- .primary-text
+  //-   p Welcome to Jason's [UNOFFICIAL] AniList [UNOFFICIAL] Plex Media Server
+  //-   p Enter your username to automatically download your "Watch" list!
+  
+  .landing-left.landing-container
+    div
+      .padding
+      img(src="images/anilist_logo.png" height="64px")
+      .padding-small
+        p Register your #[a(href="https://anilist.co/" class="anilist-link") AniList] username to automatically download your "Watching" list
+      form(method='POST' action='/add_anilist_user')
+        input#username.text-input(type='text', placeholder='username' name='username')
+        input(type='hidden' value='/' name='redirect')
+        button(type='submit') Register
+      if username
+        p #{username} registered successfully!
 
-    .landing-right
-      p Download Plex and watch your (and others) animes!
+  .landing-right.landing-container
+    .black-overlay
+    div
+      .padding
+      img(src="images/plex_logo.svg" height="64px")
+      .padding-small
+        p Watch on #[a(href="https://www.plex.tv/en-ca/" class="plex-link") Plex] by entering your email to receive an invite link
+      form(method='POST' action='/register_plex_email')
+        input#email.text-input(type='email', placeholder='email' name='email')
+        input(type='hidden' value='/' name='redirect')
+        button.plex-button(type='submit') Invite Me
+      if email
+        p #{email} invited successfully - please wait 1 minute!
+
+  .landing-footer
+    p [UNOFFICIAL] AniList Plex Media Server is developed by Jason Cheung

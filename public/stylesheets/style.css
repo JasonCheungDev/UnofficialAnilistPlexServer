@@ -6,20 +6,47 @@ body {
   background-color: rgb(237,241,245);
 }
 
-a {
-  /* color: #00B7FF; */
-  color: rgb(207, 213, 220)
-}
-
 .header-strip {
   color: rgb(207, 213, 220);
   background-color: #1f2631;
   padding: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.header-strip * {
+  display: inline;
+  line-height: 2em;
+  margin: 0 1em;
+}
+
+.header-navbar-right {
+  padding-top: 10px;
+}
+
+.header-strip a {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.5em;
+  font-family: "Roboto", "Lucida Grande", Helvetica, Arial, sans-serif;
+  text-decoration: none;
+}
+
+.padding {
+  height: 200px;
+  position: relative;
+}
+
+.padding-small {
+  height: 128px;
+  position: relative;
 }
 
 .body-container {
   width: 800px;
   margin: 1em auto;
+}
+
+.body-container-contents {
   padding: 1em;
   background-color: white;
   border-radius: 5px;
@@ -36,6 +63,19 @@ button {
   font: 14px "Roboto", "Lucida Grande", Helvetica, Arial, sans-serif;
 }
 
+.plex-button {
+  background-color: orange;
+  border-radius: 1000px;
+}
+
+.anilist-link {
+  color:rgb(61,180,242);
+}
+
+.plex-link {
+  color: #e5a00d;
+}
+
 .highlight-text {
   color: rgb(61, 180, 242)
 }
@@ -43,3 +83,102 @@ button {
 .primary-text {
   color: rgb(92, 114, 138)
 }
+
+.text-input {
+  border-radius: 16px;
+  border: none;
+  padding: 8px;
+}
+
+/* LANDING */
+
+.landing-header {
+  position: absolute;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  z-index: 10;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+.landing-header a, .landing-header h1 {
+  display: inline;
+  line-height: 128px;
+  margin: 0 1em;
+}
+
+.landing-header a {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.5em;
+  font-family: "Roboto", "Lucida Grande", Helvetica, Arial, sans-serif;
+  text-decoration: none;
+}
+
+.landing-footer {
+  background-color: #1f2631;
+}
+
+.landing-footer * {
+  margin: 0;
+  margin-top: -5px; /* the heck is this gap? */
+  padding: 24px;
+}
+
+.landing-container {
+  position: relative;
+  width: 50%;
+  height: 1000px;
+  padding: 42px;
+  display: inline-block;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.landing-container > * {
+  width: 500px;
+}
+
+.landing-left {
+  /* float: left; */
+  background-image: url("/images/weathering-1.jpg");
+  background-position-x: center;
+}
+
+.landing-left > * {
+  float: right;
+}
+
+.landing-container p{
+  font-size: 2em;
+  color: white;
+  text-shadow: 2px 2px 2px rgba(1, 1, 1, 0.24);
+  /* color:rgb(237, 241, 245); */
+  opacity: 0.9;
+}
+
+.landing-right {
+  /* float: right; */
+  background-image: url("/images/plex_bg.jpg");
+}
+
+.landing-right > * {
+  float: left;
+}
+
+/* ensures all elements render in front of .black-overlay */
+.landing-right * {
+  position: relative;
+}
+
+.black-overlay {
+  position: absolute;
+  width: 100%;
+  background-color: black;
+  opacity: 0.42;
+  height: 100%;
+  margin: -42px;
+}
+/*
+color:rgb(237, 241, 245);
+*/
