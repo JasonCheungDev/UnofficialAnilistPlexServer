@@ -4,13 +4,13 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 const querystring = require('querystring')
+const cron = require('node-cron')
 // external modules
 var aniDownloader = require('./anilist-downloader-module')
 var plexInviter = require('./plex-auto-invite')
 var settings = require('./anilist-downloader-settings')
 
 var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
 
 var app = express();
 const port = 3000
@@ -29,36 +29,20 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
-// app.use('/users', usersRouter);
-
-
-// REMOVE
-app.get('/test', function(request, resource) {
-  resource.render('test', {
-    title: "Test Page TITLE!",
-    message: "Welcome to AniDownloader TEST TEST TEST!"
-  })
-})
-
-// REMOVE
-app.get('/user', function(request, resource) {
-  console.log(aniDownloader.getData())
-  resource.render('user', {
-    animes: aniDownloader.getData().animes
-  })
-})
 
 app.get('/users', function(request, resource) {
   resource.render('users', {
     title: "Users",
-    users: aniDownloader.getData().users
+    users: aniDownloader.getData().users,
+    lastUpdated: aniDownloader.getData().lastUpdatedPretty
   })
 })
 
 app.get('/animes', function(request, resource) {
   resource.render('animes', {
     title: "Animes",
-    animes: aniDownloader.getData().animes
+    animes: aniDownloader.getData().animes,
+    lastUpdated: aniDownloader.getData().lastUpdatedPretty
   })
 })
 
@@ -138,6 +122,12 @@ app.use(function(err, req, res, next) {
 process.on(`SIGINT`, async function() {
   await aniDownloader.saveData()
   process.exit() // listening for SIGINT will keep the server alive (probably b/c the console is still open)
+})
+
+// cron job (every 30 minutes)
+cron.schedule("*/30 * * * *", () => {
+  console.log("Fetching user data and updating")
+  aniDownloader.updateAll()
 })
 
 app.listen(port, () => console.log(`Example app listening on port ${port}!`))

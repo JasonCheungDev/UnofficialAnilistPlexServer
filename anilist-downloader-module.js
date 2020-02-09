@@ -763,7 +763,6 @@ function loadData() {
 // Gets cached data
 function getData() {
     logi("Getting cached data")
-    dump(globals)
     return globals.aniDownloader
 }
 
