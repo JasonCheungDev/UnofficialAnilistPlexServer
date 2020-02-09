@@ -42,7 +42,21 @@ function now() {
     // current minutes
     let minutes = date_ob.getMinutes();
 
-    return `${month}-${date} ${hours}:${minutes}`
+    var old = `${month}-${date} ${hours}:${minutes}`
+
+    return date_ob.toLocaleString('en-US', { 
+        day: 'numeric', 
+        month: 'short', 
+        hour: 'numeric', 
+        minute: 'numeric', 
+        hour12: true 
+    })
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms)
+    })
 }
 
 // CONSTANTS
@@ -55,7 +69,6 @@ const CONSTANTS = {
         PAUSED: 4,
         REPEATING: 5
     },
-    // not used
     QUALITY_PREFERENCE: [
         "BD", 
         "1080",
@@ -82,9 +95,10 @@ const CONSTANTS = {
 
 class AnimeInfo {
     constructor(id, name) {
-        this.mediaId = id
-        this.title = name
-        this.isSetup = false
+        this.mediaId = id       // anilist ID
+        this.title = name       // title
+        this.isSetup = false    // successfully went thru all auto-download procedures
+        this.noResults = false  // failed to find any results
     }
 }
 
@@ -95,11 +109,22 @@ class UserInfo {
     }
 }
 
+class FeedEntry {
+    constructor(group, title, episode, quality) {
+        this.group = group
+        this.title = title 
+        this.episode = parseInt(episode)
+        this.quality = quality
+    }
+}
+
 // RUNTIME + SERIALIZED DATA
 var globals = {
     aniDownloader: {
         animes: [],
-        users: []
+        users: [],
+        lastUpdated: Date.now(),
+        lastUpdatedPretty: ""
     }
 }
 
@@ -110,7 +135,7 @@ var trackers = {
          * Retrieves the strict anime title (for rules) from a tracker listing. This is the actual title found in a RSS query.
          * @param {String} title The tracker listing title (eg. "[TranslatorGroup] title - 12")
          */
-        parseStrictTitleFromFeedTitle: function(title) {
+        parseStrictTitleFromFeedEntry: function(entry) {
             /* explanation: 
                 "]\s+"          : find the end of the translator group "[Horrible Subs] "
                 .+?             : match everything until...
@@ -120,7 +145,7 @@ var trackers = {
                 \]\s+(.+?)(?:\s+-\s+S?\d\d)\ will capture just the title.
             */
             var regexPattern = /]\s+.+?(?:\s+-\s+S?\d\d)/
-            var match = title.match(regexPattern)
+            var match = entry.match(regexPattern)
             if (!match) return null
             return match[0].substr(0, match[0].lastIndexOf('-') + 1)
         },
@@ -138,7 +163,7 @@ var trackers = {
             // find all unique titles
             var titles = new Set();
             feedResults.forEach(item => {
-                var strictTitle = this.parseStrictTitleFromFeedTitle(item.title)
+                var strictTitle = this.parseStrictTitleFromFeedEntry(item.title)
                 if (strictTitle) {
                     titles.add(strictTitle)
                 }
@@ -170,11 +195,85 @@ var trackers = {
             logi(`Best title: ${bestTitle}`)
 
             return bestTitle
+        },
+
+        /**
+         * Retrieves the group, title, episode, and quality of an RSS entry
+         * @param {String} entry 
+         */
+        parseInfoFromFeedEntry: function(entry) {
+            logi(`Parsing info from feed entry - ${entry}`)
+            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+S?(\d\d)\s+\[(.+?)\]/
+            const match = entry.match(regexPattern)
+            if (!match) 
+                return null
+            return new FeedEntry(match[1], match[2], match[3], match[4])
+        },
+
+        /**
+         * Finds the best entry given results.
+         * 
+         * @param {String} originalTitle The original title (from AniList)
+         * @param {FeedEntry} feedResults The list of RSS feed entries
+         * @example Original: "Another" finds ["Another", "ImoCho - Another Shitty Sister Manga Adaptation"] returning "Another" for best match
+         */
+        getBestFeedEntry: function(originalTitle, feedResults) {
+            logi(`Finding best entry for ${originalTitle}`)
+
+            // find all entries with unique titles
+            var entries = new Map()
+            feedResults.forEach(item => {
+                var entry = this.parseInfoFromFeedEntry(item.title)
+                if (!entry)
+                    return
+                if (entries.has(entry.title)) {
+                    for (let qualityPreference of CONSTANTS.QUALITY_PREFERENCE) {
+                        const existing = entries.get(entry.title).quality.includes(qualityPreference)
+                        const current = entry.quality.includes(qualityPreference)
+                        if (current && !existing) {
+                            // new entry has better quality
+                            entries.set(entry.title, entry)
+                        }
+                        break
+                    }
+                } else {
+                    entries.set(entry.title, entry)
+                }
+            });
+
+            if (entries.size == 0) {
+                logw("No results detected from RSS query.")
+                return null
+            } else {
+                logi("Found unique titles:")
+                dump(entries)
+            }
+            
+            // find best match 
+            function simpleEvaluator(originalTitle, entryToCheck) {
+                return Math.abs(originalTitle.length - entryToCheck.title.length)
+            }
+
+            var bestEntry = null;
+            var errorRating = Infinity
+            entries.forEach(item => {
+                const error = simpleEvaluator(originalTitle, item)
+                if (error < errorRating) {
+                    bestEntry = item
+                    errorRating = error
+                }
+            })
+
+            logi(`Best title: ${bestEntry}`)
+            return bestEntry
         }
     },
     nyaa: {
-        generateRssFeedUrl: function(title, quality, group) {
+        generateRssFeedUrl: function(title, quality, group, makeStrict) {
             // c=1_2 == Anime - English Translated
+            if (makeStrict) {
+                title = `"${title}"`
+            }
             var uriFriendlyString = "https://nyaa.si/?page=rss&q=" + encodeURI(group + " " + title + " " + quality) + "&c=1_2&f=0"
             logi(`nya.generateRssFeedUrl: ${uriFriendlyString}`)
             return uriFriendlyString
@@ -194,7 +293,7 @@ var qbt = {
         return 'http://localhost:' + settings.QBT.PORT
     },
     handleResponse: function(response) {
-        dump(response)
+        // dump(response)
     },
     authenticate: async function() {
         var apiUri = "/api/v2/auth/login?"
@@ -255,6 +354,8 @@ var qbt = {
         }
     },
     addRule: async function(feed, title, strictMatchRule) {
+        logi(`Adding rule ${title}`)
+
         const apiUri = '/api/v2/rss/setRule?'
 
         const safePath = sanitize(title)
@@ -293,8 +394,11 @@ var qbt = {
 
         const response = await fetch(this.getUrl() + apiUri + queryString, options)
 
-        if (!response.ok) {
-            loge("FAILED TO ADD RSS RULE TO QBT:\n" + util.inspect(object, false, null, true))
+        if (response.status == 409) {
+            logi("RSS RULE ALREADY EXISTS")
+            // don't return, need to mark
+        } else if (!response.ok) {
+            loge("FAILED TO ADD RSS RULE TO QBT:\n" + dump(response))
             return;
         } 
 
@@ -303,6 +407,7 @@ var qbt = {
             return animeInfo.title == title;
         })
         if (element) {
+            logi("marked")
             element.isSetup = true;
         } else {
             logw(`qbt could not mark cached anime as setup - could not find the anime ${title}`)
@@ -479,7 +584,6 @@ var anilist = {
 
     handleJsonResponse: function(response) {
         return response.json().then(function (json) {
-            dump(response)
             return response.ok ? json : Promise.reject(json);
         });
     },
@@ -488,18 +592,17 @@ var anilist = {
 
     handleUserListdata: function(data) {
         logi("=====");
-        
-        dump(data)
 
+        var i = 0
         data.data.MediaListCollection.lists.forEach(MediaListGroup => {
-            MediaListGroup.entries.forEach(MediaList => {
+            MediaListGroup.entries.forEach((MediaList, index, array) => {
                 var mediaId = MediaList.mediaId;
 
                 // check if necessary 
                 var animeInfo = globals.aniDownloader.animes.find(element => {
                     return element.mediaId == mediaId;
                 })
-                if (animeInfo) {
+                if (animeInfo && animeInfo.isSetup) {
                     logi(`aniApi: ${mediaId} is already setup - ignoring.`)
                     return;
                 }
@@ -508,21 +611,25 @@ var anilist = {
                     id: mediaId
                 }
 
-                var iReq = generateRequest(queryAnime, iVar)
+                var iReq = anilist.generateRequest(anilist.queryAnime, iVar)
 
-                fetch(iReq.url, iReq.options)
-                    .then(handleJsonResponse)
-                    .then(handleMediaData)
-                    .catch(handleError);
+                // stagger requests
+                setTimeout(() => {
+                    fetch(iReq.url, iReq.options)
+                        .then(anilist.handleJsonResponse)
+                        .then(anilist.handleMediaData)
+                        .catch(anilist.handleError)
+                }, settings.SHARED.DELAY * i++)
+
             });
-        });
+        }); // pass scope into block
     },
 
     handleError: function(error) {
         loge(error);
     },
 
-    handleMediaData: function(data) {
+    handleMediaData: async function(data) {
         var mediaId = data.data.Media.id;
         dump(data.data.Media.title)
         var title = data.data.Media.title.romaji
@@ -530,21 +637,40 @@ var anilist = {
 
         // track data 
         globals.aniDownloader.animes.push(animeInfo);
-
         logi(title)
-
-        // update feed 
-        var feed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS)
-        qbt.addFeed(feed, title)
 
         // update rules 
         if (CONSTANTS.MISC.strict) {
-            trackers.nyaa.getRssFeedResults(feed).then((results) => {
-                var strictRule = trackers.common.generateStrictTitleFromFeedResults(title, results)
-                qbt.addRule(feed, title, strictRule)
-            })
+            // update feed 
+            let initialFeed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS, false)
+            let initialResults = await trackers.nyaa.getRssFeedResults(initialFeed)
+            let bestEntry = trackers.common.getBestFeedEntry(title, initialResults)
+
+            if (!bestEntry) {
+                logw(`Unable to find any results for ${title} - relaxing search`)
+
+                await sleep(settings.SHARED.DELAY)
+                
+                initialFeed = trackers.nyaa.generateRssFeedUrl(title, "", "", false)
+                initialResults = await trackers.nyaa.getRssFeedResults(initialFeed)
+                bestEntry = trackers.common.getBestFeedEntry(title, initialResults)
+
+                if (!bestEntry) {
+                    // no results - failed
+                    animeInfo.noResults = true
+                    logw(`Unable to find any results for ${title} - marking as failed`)
+                    return
+                }
+            }
+
+            let bestFeed = trackers.nyaa.generateRssFeedUrl(bestEntry.title, bestEntry.quality, bestEntry.group, true)
+            await qbt.addFeed(bestFeed, title)
+            await qbt.addRule(bestFeed, title, `\] ${bestEntry.title} -`)
         } else {
-            qbt.addRule(feed, title)
+            // update feed (no checks - just add)
+            let feed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS)
+            await qbt.addFeed(feed, title)
+            await qbt.addRule(feed, title)
         }
     }
 }
@@ -580,17 +706,26 @@ function removeUser(name) {
 // Checks all AniList users and downloads all anime in the "Watching" list.
 function updateAll() {
 
-    globals.aniDownloader.users.forEach(userInfo => {
-        userInfo.lastUpdated = now()
+    globals.aniDownloader.users.forEach((userInfo, index, array) => {
+        
+        // stagger requests
+        setTimeout(() => {
 
-        var request = anilist.generateRequest(anilist.queryMediaListCollection, { name: userInfo.username });
+            userInfo.lastUpdated = now()
 
-        // Make the HTTP Api request
-        fetch(request.url, request.options)
-            .then(anilist.handleJsonResponse)
-            .then(anilist.handleUserListdata)
-            .catch(anilist.handleError);
+            var request = anilist.generateRequest(anilist.queryMediaListCollection, { name: userInfo.username });
+    
+            // Make the HTTP Api request
+            fetch(request.url, request.options)
+                .then(anilist.handleJsonResponse)
+                .then(anilist.handleUserListdata)
+                .catch(anilist.handleError);
+    
+        }, settings.SHARED.DELAY * index)
+
     })
+
+    globals.aniDownloader.lastUpdatedPretty = now()
 }
 
 // Saves all cached data
@@ -638,25 +773,22 @@ process.on('exit', () => {
     saveData()
 })
 
+process.on('SIGINT', function() {
+  logw('User interrupted')
+  process.exit()
+});
+
 async function main() {
     loadData()
 
     /* Standalone 
-    addUser("Xaieon")
+    addUser("Your Username")
     */
-
-    updateAll()
-    
-    return
-    var title = "Another"
-    var feed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS)
-    var results = await trackers.nyaa.getRssFeedResults(feed)
-    var strictTitle = trackers.common.generateStrictTitleFromFeedResults(title, results)
-    logi("Best title: " + strictTitle)
-    qbt.addRule(feed, title, strictTitle)
 }
 main()
 
+module.exports.addUser = addUser
+module.exports.removeUser = removeUser
 module.exports.updateAll = updateAll
 module.exports.getData = getData
 module.exports.saveData = saveData
