@@ -251,7 +251,16 @@ var trackers = {
             
             // find best match 
             function simpleEvaluator(originalTitle, entryToCheck) {
-                return Math.abs(originalTitle.length - entryToCheck.title.length)
+                let error = Math.abs(originalTitle.length - entryToCheck.title.length)
+                if (error == 0) {
+                    // lengths are exact, check each character (useful for seasons)
+                    for (let i = 0; i < originalTitle.length; i++) {
+                        if (originalTitle.charAt(i) != entryToCheck.title.charAt(i)) {
+                            error += 1 / originalTitle.length                            
+                        }
+                    }
+                }
+                return error
             }
 
             var bestEntry = null;
@@ -630,13 +639,20 @@ var anilist = {
     },
 
     handleMediaData: async function(data) {
-        var mediaId = data.data.Media.id;
         dump(data.data.Media.title)
-        var title = data.data.Media.title.romaji
-        var animeInfo = new AnimeInfo(mediaId, title);
 
         // track data 
-        globals.aniDownloader.animes.push(animeInfo);
+        var mediaId = data.data.Media.id;
+        var title = data.data.Media.title.romaji
+        var animeInfo = globals.aniDownloader.animes.find(element => {
+            return element.mediaId == mediaId;
+        })
+
+        if (!animeInfo) {
+            animeInfo = new AnimeInfo(mediaId, title);
+            globals.aniDownloader.animes.push(animeInfo);
+        }
+
         logi(title)
 
         // update rules 
@@ -746,7 +762,6 @@ function loadData() {
     logi("aniDownloader loading cached data")
 
     try {
-        fs.readFileSync
         var data = fs.readFileSync(CONSTANTS.STORAGE.DIRECTORY + CONSTANTS.STORAGE.FILENAME)
         try {
             globals = JSON.parse(data)
@@ -757,6 +772,7 @@ function loadData() {
         }
     } catch(error) {
         loge("Failed to load cached data")
+        saveData() // most likely does not exists, create it now.
     }
 }
 
