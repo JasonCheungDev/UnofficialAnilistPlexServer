@@ -51,6 +51,8 @@ The web UI is a way to add AniList users and automatically fetch their watch lis
 1. Ensure node.js is installed
 https://nodejs.org/en/
 
+2. Write down your qBittorrent and Plex information in `anilist-downloader-settings.js`
+
 2. Open a terminal at the project root
 
 3. Run `npm install`
