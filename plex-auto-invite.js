@@ -23,24 +23,26 @@ async function inviteUsers(emails) {
     await page.keyboard.press('Enter')
 
     console.log("Logging in...")
-    const accButSelector = 'button[class^="NavBar-accountButton"]'
-    await page.waitForSelector(accButSelector)
-    await page.waitFor(2000)
 
-    // PREFERRED SERVER PAGE?
-    const preferredServerButtonSelector = 'button[class^="FirstRunExperienceStep-stepButton"]'
-    const preferredServerButton = await page.$(preferredServerButtonSelector)
-    if (preferredServerButton) {
+    // PREFERRED SERVER PAGE
+    if (SETTINGS.PLEX.MULTIPLE_SERVERS_PRESENT) {
+        console.log("Multiple servers set to TRUE - waiting for preferred server popup")
+
+        const preferredServerButtonSelector = 'button[class^="FirstRunExperienceStep-stepButton"]'
+        await page.waitFor(preferredServerButtonSelector)
+
         console.log("Preferred server screen detected")
         await page.click(preferredServerButtonSelector)
-        await page.waitFor(1000)
+
         console.log("Finding finish button")
         await page.waitForXPath(`//button[contains(., "Finish Setup")]`)
         const [finishButton] = await page.$x(`//button[contains(., "Finish Setup")]`)
         await finishButton.click()
-        await page.waitFor(1000)
     }
 
+    console.log("Main screen")
+    const accButSelector = 'button[class^="NavBar-accountButton"]'
+    await page.waitForSelector(accButSelector)
     await page.click(accButSelector)
 
     // sketchy
@@ -49,9 +51,9 @@ async function inviteUsers(emails) {
 
     // INVITE A USER
     console.log("Sharing & Invite screen")
-    const sendInviteEmail = async function(email) {
+    const sendInviteEmail = async function (email) {
         console.log(`Inviting ${email}`)
-        
+
         // hyper sketchy
         const shareLibrariesSelector = 'div[class^="SettingsPage-content"] > div[class^="UsersSettingsPageListHeader"] button[class^="UsersSettingsPage"]'
         await page.waitForSelector(shareLibrariesSelector)
@@ -60,9 +62,9 @@ async function inviteUsers(emails) {
         await page.type('#username', email)
         await page.waitForSelector(`button[type="submit"]:not([disabled])`) // wait for Plex
         await page.keyboard.press('Enter')
-    
+
         await page.waitFor(2000)
-    
+
         console.log("Desired library " + SETTINGS.PLEX.LIBRARY_NAME)
         await page.waitForXPath(`//label[contains(., "${SETTINGS.PLEX.LIBRARY_NAME}")]//input`)
         const [checkbox] = await page.$x(`//label[contains(., "${SETTINGS.PLEX.LIBRARY_NAME}")]//input`)
@@ -73,13 +75,13 @@ async function inviteUsers(emails) {
             await browser.close();
             return
         }
-    
+
         // sketchy (yes there's a space in front of the class)
         const sendButtonSelector = 'button[class^=" SpinnerButton-button"]'
         await page.click(sendButtonSelector)
-    
+
         await page.waitFor(2000)
-    
+
         const closeWindowSelector = 'button[class^="ModalContent-closeButton"]'
         await page.click(closeWindowSelector)
     }
@@ -87,6 +89,8 @@ async function inviteUsers(emails) {
     for (email of emails) {
         await sendInviteEmail(email)
     }
+
+    console.log("FINISHED inviting all emails")
 
     await browser.close();
 }
