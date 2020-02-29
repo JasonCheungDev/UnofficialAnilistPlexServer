@@ -39,9 +39,18 @@ app.get('/users', function(request, resource) {
 })
 
 app.get('/animes', function(request, resource) {
+  var animes = aniDownloader.getData().animes
+  // slightly dangerous as we're reordering the source array
+  animes.sort((lhs, rhs) => {
+    const LARGE = 10000
+    const l = lhs.noResults ? LARGE : 0
+    const r = rhs.noResults ? LARGE : 0
+    return lhs.title.localeCompare(rhs.title) + (l - r)
+  })
+
   resource.render('animes', {
     title: "Animes",
-    animes: aniDownloader.getData().animes,
+    animes: animes,
     lastUpdated: aniDownloader.getData().lastUpdatedPretty
   })
 })

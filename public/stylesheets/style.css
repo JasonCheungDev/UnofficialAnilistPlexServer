@@ -84,6 +84,10 @@ button {
   color: rgb(92, 114, 138)
 }
 
+.error-text {
+  color: lightcoral;
+}
+
 .text-input {
   border-radius: 16px;
   border: none;

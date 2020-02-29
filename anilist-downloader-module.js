@@ -99,6 +99,7 @@ class AnimeInfo {
         this.title = name       // title
         this.isSetup = false    // successfully went thru all auto-download procedures
         this.noResults = false  // failed to find any results
+        this.manual = ""        // manual title to search for
     }
 }
 
@@ -273,7 +274,7 @@ var trackers = {
                 }
             })
 
-            logi(`Best title: ${bestEntry}`)
+            logi(`Best title: ${dump(bestEntry)}`)
             return bestEntry
         }
     },
@@ -372,7 +373,7 @@ var qbt = {
         const downloadRule = {
             "enabled": true,
             "mustContain": strictMatchRule ? strictMatchRule : "",
-            "mustNotContain": "batch",
+            "mustNotContain": strictMatchRule ? "batch" : "",
             "useRegex": strictMatchRule ? true : false,
             "episodeFilter": "",
             "smartFilter": false,
@@ -656,7 +657,12 @@ var anilist = {
         logi(title)
 
         // update rules 
-        if (CONSTANTS.MISC.strict) {
+        if (animeInfo.manual) {
+            // manual mode set
+            let feed = trackers.nyaa.generateRssFeedUrl(animeInfo.manual, "", "", false)
+            await qbt.addFeed(feed, title)
+            await qbt.addRule(feed, title)
+        } else if (CONSTANTS.MISC.strict) {
             // update feed 
             let initialFeed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS, false)
             let initialResults = await trackers.nyaa.getRssFeedResults(initialFeed)
@@ -769,6 +775,7 @@ function loadData() {
             dump(globals)
         } catch (error) {
             loge("Failed to parse cached data")
+            dump(error)
         }
     } catch(error) {
         loge("Failed to load cached data")

@@ -11,5 +11,8 @@ block content
     .body-container-contents
       .highlight-text
         each item in animes
-          li=item.title
+          if (!item.noResults)
+            li=item.title
+          else 
+            li.error-text #{item.title} [NO RESULTS]
       button(onclick="onUpdateButtonClick()") Update
