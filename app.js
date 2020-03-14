@@ -13,6 +13,7 @@ var settings = require('./anilist-downloader-settings')
 var indexRouter = require('./routes/index');
 
 var app = express();
+app.disable('etag');
 const port = 3000
 
 // initialize module
@@ -53,6 +54,26 @@ app.get('/animes', function(request, resource) {
     animes: animes,
     lastUpdated: aniDownloader.getData().lastUpdatedPretty
   })
+})
+
+app.get('/anime/:mediaId', function(request, resource) {
+  var animes = aniDownloader.getData().animes
+  const found = animes.find( element => { return element.mediaId == request.params.mediaId });
+  if (found) {
+    resource.render('anime', {
+      title: "Anime",
+      anime: found
+    })
+  } else {
+    resource.send("ERROR: ANIME NOT FOUND") 
+  }
+})
+
+app.post('/set_anime_manual_rule', function(req, res) {
+  let rule = req.body.rule
+  let id = req.body.mediaId
+  aniDownloader.setManualRule(id, rule)
+  res.redirect(`/anime/${id}`)
 })
 
 app.post('/add_anilist_user', function(request, resource) {
@@ -136,6 +157,7 @@ process.on(`SIGINT`, async function() {
 // cron job (every 30 minutes)
 cron.schedule("*/30 * * * *", () => {
   console.log("Fetching user data and updating")
+  aniDownloader.saveData()
   aniDownloader.updateAll()
 })
 

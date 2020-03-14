@@ -1,0 +1,23 @@
+extends layout_with_header
+
+block content
+  .body-container
+    h3.primary-text #{anime.title}
+    .body-container-contents
+      .highlight-text
+        if (anime.noResults)
+          p.error-text ERROR: NO RESULTS DETECTED
+        else 
+          p No errors detected
+
+  .body-container
+    h3.primary-text Manual
+    .body-container-contents
+      .primary-text
+        p A manual rule will override automatic torrent selection.
+        p To set a manual rule make a search on #[a(href="https://nyaa.si/?f=0&c=1_2&q=" target="_blank" class="anilist-link") Nyaa] and paste it in the box below.
+        p #[b ALL torrents will be downloaded] in the search so please make it as exact as possible!
+    form(method='POST' action='/set_anime_manual_rule')
+      input.text-input(type='text', placeholder='' value="#{anime.manual}" name='rule')
+      input(type='hidden' value="#{anime.mediaId}" name='mediaId')
+      button(type='submit') Set Manual Rule

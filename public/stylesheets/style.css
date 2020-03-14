@@ -52,6 +52,10 @@ body {
   border-radius: 5px;
 }
 
+.body-container-contents li {
+  margin: 5px 15px;
+}
+
 button {
   margin: 10px;
   border-radius: 3px;
@@ -86,6 +90,14 @@ button {
 
 .error-text {
   color: lightcoral;
+}
+
+a {
+  text-decoration: none;
+}
+
+a:hover {
+  color: rgb(61, 180, 242);
 }
 
 .text-input {

@@ -208,7 +208,25 @@ var trackers = {
             const match = entry.match(regexPattern)
             if (!match) 
                 return null
-            return new FeedEntry(match[1], match[2], match[3], match[4])
+            return new FeedEntry(match[1], match[2], match[3], this.parseQualityFromString(match[4]))
+        },
+
+        parseQualityFromString: function(string) {
+            var quality = 0
+            
+            if (string.includes("BD") || string.includes("BluRay")) {
+                quality += 10000 // Bluray modifier is always preferred
+            }
+
+            if (string.includes("1080")) {
+                quality += 1080
+            } else if (string.includes("720")) {
+                quality += 720
+            } else if (string.includes("480")) {
+                quality += 480
+            } 
+
+            return quality
         },
 
         /**
@@ -224,19 +242,17 @@ var trackers = {
             // find all entries with unique titles
             var entries = new Map()
             feedResults.forEach(item => {
-                var entry = this.parseInfoFromFeedEntry(item.title)
+                var entry = this.parseInfoFromFeedEntry(item["title"])
                 if (!entry)
                     return
                 if (entries.has(entry.title)) {
-                    for (let qualityPreference of CONSTANTS.QUALITY_PREFERENCE) {
-                        const existing = entries.get(entry.title).quality.includes(qualityPreference)
-                        const current = entry.quality.includes(qualityPreference)
-                        if (current && !existing) {
-                            // new entry has better quality
-                            entries.set(entry.title, entry)
-                        }
-                        break
-                    }
+                    const existingEntry = entries.get(entry.title)
+
+                    if (entry.quality > existingEntry.quality) {
+                        // new entry has better quality
+                        entries.set(entry.title, entry)
+                    } 
+
                 } else {
                     entries.set(entry.title, entry)
                 }
@@ -338,6 +354,10 @@ var qbt = {
             return;
         }
 
+        // remove first if necessary
+        logi("Attempting to remove existing feed first")
+        await this.removeFeed(title)
+
         // setup request
         const apiUri = '/api/v2/rss/addFeed?'
 
@@ -361,6 +381,31 @@ var qbt = {
 
         if (!response.ok) {
             loge("FAILED TO ADD RSS FEED TO QBT:\n" + util.inspect(response, false, null, true))
+        }
+    },
+    removeFeed: async function(title) {
+        // setup request
+        const apiUri = '/api/v2/rss/removeItem?'
+
+        const safePath = sanitize(title)
+
+        const queryString = querystring.stringify({
+            path: safePath
+        })
+
+        const SID = await this.authenticate()
+
+        const options = {
+            method: 'GET', // WARNING: MUST BE GET (despite the docs)
+            headers: {
+                'Cookie': SID
+            }
+        }
+
+        const response = await fetch(this.getUrl() + apiUri + queryString, options)
+
+        if (!response.ok) {
+            logi(`Failed to remove RSS feed title ${title} - this is normal for initial setup.`)
         }
     },
     addRule: async function(feed, title, strictMatchRule) {
@@ -654,7 +699,17 @@ var anilist = {
             globals.aniDownloader.animes.push(animeInfo);
         }
 
+        await anilist.setupAutoDownloading(animeInfo)
+    },
+
+    setupAutoDownloading: async function(animeInfo) {
+        const title = animeInfo.title
         logi(title)
+
+        if (animeInfo.isSetup) {
+            logi(`${title} is already setup - skipping setting up auto-downloading`)
+            return
+        }
 
         // update rules 
         if (animeInfo.manual) {
@@ -725,6 +780,23 @@ function removeUser(name) {
     });
 }
 
+function setManualRule(mediaId, rule) {
+    logi(`Adding manual rule for ${mediaId} with rule ${rule}`)
+
+    let animeInfo = globals.aniDownloader.animes.find( anime => {
+        return anime.mediaId == mediaId
+    });
+
+    if (!animeInfo) {
+        loge(`Unable to add manual rule, could not find anime!`)
+        return
+    }
+
+    animeInfo.manual = rule
+    animeInfo.isSetup = false
+    animeInfo.noResults = false
+}
+
 // Checks all AniList users and downloads all anime in the "Watching" list.
 function updateAll() {
 
@@ -748,6 +820,17 @@ function updateAll() {
     })
 
     globals.aniDownloader.lastUpdatedPretty = now()
+}
+
+async function updateAnimesOnly() {
+    // TODO: Use the finalized list after all user lists aggregation occurs.
+    for (animeInfo of globals.aniDownloader.animes) {
+        if (animeInfo.isSetup) {
+            continue
+        }
+        await anilist.setupAutoDownloading(animeInfo)
+        await sleep(settings.SHARED.DELAY)
+    }
 }
 
 // Saves all cached data
@@ -783,6 +866,15 @@ function loadData() {
     }
 }
 
+// Updates data to new format 
+function migrateData() {
+    globals.aniDownloader.animes.forEach(animeInfo => {
+        if (animeInfo.noResults === undefined) {
+            animeInfo.noResults = false
+        }
+    })
+}
+
 // Gets cached data
 function getData() {
     logi("Getting cached data")
@@ -802,7 +894,8 @@ process.on('SIGINT', function() {
 
 async function main() {
     loadData()
-
+    migrateData()
+    // await updateAnimesOnly()
     /* Standalone 
     addUser("Your Username")
     */
@@ -811,6 +904,7 @@ main()
 
 module.exports.addUser = addUser
 module.exports.removeUser = removeUser
+module.exports.setManualRule = setManualRule
 module.exports.updateAll = updateAll
 module.exports.getData = getData
 module.exports.saveData = saveData

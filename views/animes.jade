@@ -9,10 +9,16 @@ block content
   .body-container
     h3.primary-text Anime List
     .body-container-contents
-      .highlight-text
+      div
         each item in animes
-          if (!item.noResults)
-            li=item.title
-          else 
-            li.error-text #{item.title} [NO RESULTS]
+          if (item.noResults)
+            li
+              a(href="/anime/#{item.mediaId}" class="error-text") #{item.title} [NO RESULTS]
+          else if (item.manual)
+            li
+              a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title} [MANUAL RULE]
+          else
+            li
+              a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title}
+
       button(onclick="onUpdateButtonClick()") Update
