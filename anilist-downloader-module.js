@@ -6,6 +6,7 @@ const querystring = require('querystring')
 const sanitize = require('sanitize-filename')
 const fs = require('fs')
 const Parser = require('rss-parser');
+const { si, pantsu } = require('nyaapi')
 //external
 const settings = require('./anilist-downloader-settings.js')
 
@@ -111,11 +112,14 @@ class UserInfo {
 }
 
 class FeedEntry {
-    constructor(group, title, episode, quality) {
+    constructor(link, group, title, episode, quality, isBatch, seeders) {
+        this.link = link
         this.group = group
-        this.title = title 
+        this.title = title
         this.episode = parseInt(episode)
         this.quality = quality
+        this.isBatch = isBatch
+        this.seeders = seeders
     }
 }
 
@@ -202,13 +206,23 @@ var trackers = {
          * Retrieves the group, title, episode, and quality of an RSS entry
          * @param {String} entry 
          */
-        parseInfoFromFeedEntry: function(entry) {
+        parseInfoFromFeedEntry: function(link, entry, seeders) {
             logi(`Parsing info from feed entry - ${entry}`)
+
+            // Standard Match
             const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+S?(\d\d)\s+\[(.+?)\]/
             const match = entry.match(regexPattern)
-            if (!match) 
-                return null
-            return new FeedEntry(match[1], match[2], match[3], this.parseQualityFromString(match[4]))
+            if (match) {
+                return new FeedEntry(link, match[1], match[2], match[3], this.parseQualityFromString(match[4]), false, seeders)
+            }
+
+            // Extrapolate Match (batch assumed)
+            const groupRegexPattern = /^\[(.+?)\]/
+            const groupMatch = entry.match(groupRegexPattern)
+            const group = groupMatch ? groupMatch[1] : ""
+            const title = this.cleanTitleFromEntry(entry)
+            const quality = this.parseQualityFromString(entry)
+            return new FeedEntry(link, group, title, -1, quality, true, seeders)
         },
 
         parseQualityFromString: function(string) {
@@ -229,6 +243,16 @@ var trackers = {
             return quality
         },
 
+        cleanTitleFromEntry: function(string) {
+            return string.replace(/_/g, " ")
+                .replace(/\(.+?\)/g, "")
+                .replace(/\[.+?\]/g, "")
+                .replace(/batch/gi, "")
+                .replace(/\d\d-\d\d/g, "")
+                .replace(/\..{3}$/, "")
+                .trim()
+        },
+
         /**
          * Finds the best entry given results.
          * 
@@ -238,59 +262,76 @@ var trackers = {
          */
         getBestFeedEntry: function(originalTitle, feedResults) {
             logi(`Finding best entry for ${originalTitle}`)
+            dump(feedResults)
 
-            // find all entries with unique titles
-            var entries = new Map()
+            if (feedResults.length == 0) {
+                logi("No feed results")
+                return null
+            }
+
+            // parse all entries 
+            var entries = new Array()
             feedResults.forEach(item => {
-                var entry = this.parseInfoFromFeedEntry(item["title"])
+                var entry = this.parseInfoFromFeedEntry(item.link, item.title, item.seeders)
                 if (!entry)
                     return
-                if (entries.has(entry.title)) {
-                    const existingEntry = entries.get(entry.title)
-
-                    if (entry.quality > existingEntry.quality) {
-                        // new entry has better quality
-                        entries.set(entry.title, entry)
-                    } 
-
-                } else {
-                    entries.set(entry.title, entry)
-                }
+                entries.push(entry)
             });
 
             if (entries.size == 0) {
                 logw("No results detected from RSS query.")
                 return null
-            } else {
-                logi("Found unique titles:")
-                dump(entries)
             }
             
-            // find best match 
-            function simpleEvaluator(originalTitle, entryToCheck) {
-                let error = Math.abs(originalTitle.length - entryToCheck.title.length)
+            // title evaluator
+            function titleEvaluator(originalTitle, entryToCheck) {
+                const lowerCaseTitle = originalTitle.toLowerCase()
+                const entryTitle = entryToCheck.title.toLowerCase()
+
+                let error = Math.abs(lowerCaseTitle.length - entryTitle.length)
                 if (error == 0) {
                     // lengths are exact, check each character (useful for seasons)
-                    for (let i = 0; i < originalTitle.length; i++) {
-                        if (originalTitle.charAt(i) != entryToCheck.title.charAt(i)) {
-                            error += 1 / originalTitle.length                            
+                    for (let i = 0; i < lowerCaseTitle; i++) {
+                        if (originalTitle.charAt(i) != entryTitle.charAt(i)) {
+                            error += 1 / lowerCaseTitle                            
                         }
                     }
                 }
                 return error
             }
 
-            var bestEntry = null;
-            var errorRating = Infinity
-            entries.forEach(item => {
-                const error = simpleEvaluator(originalTitle, item)
-                if (error < errorRating) {
-                    bestEntry = item
-                    errorRating = error
-                }
-            })
+            function entryComparator(lhs, rhs) {
+                // best title
+                const l = titleEvaluator(originalTitle, lhs)
+                const r = titleEvaluator(originalTitle, rhs)
+                if (l != r) {
+                    return l - r
+                } 
 
-            logi(`Best title: ${dump(bestEntry)}`)
+                // best quality
+                if (lhs.quality != rhs.quality) {
+                    return rhs.quality - lhs.quality
+                }
+
+                // batch preferred
+                if (lhs.isBatch != rhs.isBatch) {
+                    return lhs.isBatch ? -1 : 1
+                }
+
+                // seeders preferred
+                if (lhs.seeders != rhs.seeders) {
+                    return rhs.seeders - lhs.seeders
+                }
+
+                // all checks equal, no difference
+                return 0
+            }
+
+            entries.sort(entryComparator)
+
+            let bestEntry = entries[0]
+            logi(`Best entry: ${bestEntry.title} is batch ${bestEntry.isBatch} for title ${originalTitle}`)
+            dump(bestEntry)
             return bestEntry
         }
     },
@@ -306,9 +347,36 @@ var trackers = {
         },
 
         getRssFeedResults: async function(feedUrl) {
-            let parser = new Parser();
+            logw("====FEED URL")
+            dump(feedUrl)
+            let parser = new Parser({
+                customFields: {
+                    item: [
+                        ["nyaa:seeders", "seeders"]
+                    ]
+                }
+            });
             let results = await parser.parseURL(feedUrl)
             return results.items
+        },
+
+        getSearchResults: async function(search) {
+            const maximumResults = 75
+            let results = await si.search(search, maximumResults, {
+                category: '1_2',
+                sort: 'seeders',
+                p: 1
+            })
+            // reformat to rss standard (this allows us reuse getBestFeedEntry)
+            results = results.map(result => { 
+                const rssStandard = {
+                    title: result.name,
+                    link: result.links.file,
+                    seeders: result.seeders
+                }
+                return rssStandard
+            })
+            return results
         }
     }
 }
@@ -344,6 +412,8 @@ var qbt = {
         return parsedCookie
     },
     addFeed: async function(feed, title) {
+        logi(`[QBT] Adding feed ${feed}`)
+
         // check if necessary
         var element = globals.aniDownloader.animes.find(animeInfo => {
             return animeInfo.title == title;
@@ -409,7 +479,7 @@ var qbt = {
         }
     },
     addRule: async function(feed, title, strictMatchRule) {
-        logi(`Adding rule ${title}`)
+        logi(`[QBT] Adding rule ${title}`)
 
         const apiUri = '/api/v2/rss/setRule?'
 
@@ -526,6 +596,49 @@ var qbt = {
 
         dump(response)
         */
+    },
+    addTorrent: async function(title, torrentUrl) {
+        logi(`[QBT] Adding torrent: ${torrentUrl} for title: ${title}`)
+
+        const apiUri = '/api/v2/torrents/add?'
+
+        const safePath = sanitize(title)
+
+        const queryString = querystring.stringify({
+            urls: torrentUrl,
+            savepath: settings.QBT.DOWNLOAD_LOCATION + safePath,
+            category: "Anime"
+        })
+
+        const SID = await this.authenticate()
+
+        const options = {
+            method: 'GET', // WARNING: MUST BE GET (despite the docs)
+            headers: {
+                'Cookie': SID
+            }
+        }
+
+        const response = await fetch(this.getUrl() + apiUri + queryString, options)
+
+        if (response.status == 415) {
+            loge("Torrent file is not valid.")
+            return
+        } else if (!response.ok) {
+            loge("FAILED TO ADD TORRENT TO QBT:\n" + dump(response))
+            return
+        } 
+
+        // track
+        var element = globals.aniDownloader.animes.find(animeInfo => {
+            return animeInfo.title == title;
+        })
+        if (element) {
+            logi(`[UPDATE] ${title} is setup`)
+            element.isSetup = true;
+        } else {
+            logw(`qbt could not mark cached anime as setup - could not find the anime ${title}`)
+        }
     }
 }
 
@@ -719,30 +832,27 @@ var anilist = {
             await qbt.addRule(feed, title)
         } else if (CONSTANTS.MISC.strict) {
             // update feed 
-            let initialFeed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS, false)
-            let initialResults = await trackers.nyaa.getRssFeedResults(initialFeed)
-            let bestEntry = trackers.common.getBestFeedEntry(title, initialResults)
+            const results = await trackers.nyaa.getSearchResults(title)
+            const bestEntry = trackers.common.getBestFeedEntry(title, results)
 
-            if (!bestEntry) {
-                logw(`Unable to find any results for ${title} - relaxing search`)
-
-                await sleep(settings.SHARED.DELAY)
-                
-                initialFeed = trackers.nyaa.generateRssFeedUrl(title, "", "", false)
-                initialResults = await trackers.nyaa.getRssFeedResults(initialFeed)
-                bestEntry = trackers.common.getBestFeedEntry(title, initialResults)
-
-                if (!bestEntry) {
-                    // no results - failed
-                    animeInfo.noResults = true
-                    logw(`Unable to find any results for ${title} - marking as failed`)
-                    return
+            if (bestEntry) {
+                if (bestEntry.isBatch) {
+                    await qbt.addTorrent(title, bestEntry.link)
+                } else {
+                    let bestFeed = trackers.nyaa.generateRssFeedUrl(bestEntry.title, bestEntry.quality, bestEntry.group, true)
+                    await qbt.addFeed(bestFeed, title)
+                    await qbt.addRule(bestFeed, title, `\] ${bestEntry.title} -`)
                 }
-            }
 
-            let bestFeed = trackers.nyaa.generateRssFeedUrl(bestEntry.title, bestEntry.quality, bestEntry.group, true)
-            await qbt.addFeed(bestFeed, title)
-            await qbt.addRule(bestFeed, title, `\] ${bestEntry.title} -`)
+                if (bestEntry.seeders == 0) {
+                    logw("Best Entry has no seeders - download may stall!")
+                }
+            } else {
+                // no results - failed
+                animeInfo.noResults = true
+                logw(`Unable to find any results for ${title} - marking as failed`)
+                return
+            }
         } else {
             // update feed (no checks - just add)
             let feed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS)
@@ -892,10 +1002,18 @@ process.on('SIGINT', function() {
   process.exit()
 });
 
+
 async function main() {
     loadData()
     migrateData()
-    // await updateAnimesOnly()
+
+    // Test all saved animes
+    //await updateAnimesOnly()
+
+    // Test single anime
+    // const testAnime = new AnimeInfo(106625, "Haikyuu!! TO THE TOP")
+    //await anilist.setupAutoDownloading(testAnime)
+    
     /* Standalone 
     addUser("Your Username")
     */
