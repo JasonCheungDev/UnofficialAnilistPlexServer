@@ -3,6 +3,10 @@ extends layout
 block header
   .header-strip
     .header-navbar-left
+      a.logo(href="/") 
+        span.anilist-link A
+        span.plex-link P
+        span(style={color: 'white'}) S
       h1= title
     .header-navbar-right
       a(href="/users") Users
