@@ -832,7 +832,8 @@ var anilist = {
             await qbt.addRule(feed, title)
         } else if (CONSTANTS.MISC.strict) {
             // update feed 
-            const results = await trackers.nyaa.getSearchResults(title)
+            const relaxedTitle = title.replace(/[^a-zA-Z\d\s]/g, " ")
+            const results = await trackers.nyaa.getSearchResults(relaxedTitle)
             const bestEntry = trackers.common.getBestFeedEntry(title, results)
 
             if (bestEntry) {
