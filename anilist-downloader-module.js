@@ -133,6 +133,23 @@ var globals = {
     }
 }
 
+// APPLICATION
+var shared = {
+    markAnimeSetup: function(title) {
+        var element = globals.aniDownloader.animes.find(animeInfo => {
+            return animeInfo.title == title;
+        })
+
+        if (element) {
+            logi(`[UPDATE] ${title} is setup`)
+            element.isSetup = true
+            element.noResults = false
+        } else {
+            logw(`Could not mark cached anime as setup - could not find the anime ${title}`)
+        }
+    }
+}
+
 // TORRENT TRACKER API
 var trackers = {
     common: {
@@ -528,15 +545,7 @@ var qbt = {
         } 
 
         // track
-        var element = globals.aniDownloader.animes.find(animeInfo => {
-            return animeInfo.title == title;
-        })
-        if (element) {
-            logi("marked")
-            element.isSetup = true;
-        } else {
-            logw(`qbt could not mark cached anime as setup - could not find the anime ${title}`)
-        }
+        shared.markAnimeSetup(title)
     },
     queryTorrents: function() {
         /*
@@ -630,15 +639,7 @@ var qbt = {
         } 
 
         // track
-        var element = globals.aniDownloader.animes.find(animeInfo => {
-            return animeInfo.title == title;
-        })
-        if (element) {
-            logi(`[UPDATE] ${title} is setup`)
-            element.isSetup = true;
-        } else {
-            logw(`qbt could not mark cached anime as setup - could not find the anime ${title}`)
-        }
+        shared.markAnimeSetup(title)
     }
 }
 
