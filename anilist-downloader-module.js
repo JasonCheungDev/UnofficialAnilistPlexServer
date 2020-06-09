@@ -703,7 +703,7 @@ var anilist = {
 
     queryMediaListCollection: 
 `query ($name: String) {
-    MediaListCollection(userName: $name, type: ANIME, status: CURRENT) {
+    MediaListCollection(userName: $name, type: ANIME) {
         lists {
             name
             entries {
@@ -764,6 +764,11 @@ var anilist = {
 
         var i = 0
         data.data.MediaListCollection.lists.forEach(MediaListGroup => {
+            
+            if (!settings.ANI.LISTS.includes(MediaListGroup.name)) {
+                return
+            }
+
             MediaListGroup.entries.forEach((MediaList, index, array) => {
                 var mediaId = MediaList.mediaId;
 
