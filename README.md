@@ -3,7 +3,7 @@
 Automatically download your AniList watch list and serve on a Plex Media Server!
 
 ## Features
-- Automatically pull AniList user's watch list
+- Automatically pull AniList user's watch list (or whatever lists you specify)
 - Automatic qBittorrent torrenting of animes with nyaa
 - Auto-inviter for Plex 
 - Local web UI to manage users and animes
