@@ -2,6 +2,9 @@ module.exports = {
     SHARED: {
         DELAY: 10000, 
     },
+    ANI: {
+        LISTS: [ "Watching", "APS-Request" ]
+    },
     QBT: {
         PORT: 8080,
         USERNAME: "admin",

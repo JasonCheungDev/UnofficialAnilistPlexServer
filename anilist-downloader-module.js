@@ -133,6 +133,23 @@ var globals = {
     }
 }
 
+// APPLICATION
+var shared = {
+    markAnimeSetup: function(title) {
+        var element = globals.aniDownloader.animes.find(animeInfo => {
+            return animeInfo.title == title;
+        })
+
+        if (element) {
+            logi(`[UPDATE] ${title} is setup`)
+            element.isSetup = true
+            element.noResults = false
+        } else {
+            logw(`Could not mark cached anime as setup - could not find the anime ${title}`)
+        }
+    }
+}
+
 // TORRENT TRACKER API
 var trackers = {
     common: {
@@ -528,15 +545,7 @@ var qbt = {
         } 
 
         // track
-        var element = globals.aniDownloader.animes.find(animeInfo => {
-            return animeInfo.title == title;
-        })
-        if (element) {
-            logi("marked")
-            element.isSetup = true;
-        } else {
-            logw(`qbt could not mark cached anime as setup - could not find the anime ${title}`)
-        }
+        shared.markAnimeSetup(title)
     },
     queryTorrents: function() {
         /*
@@ -630,15 +639,7 @@ var qbt = {
         } 
 
         // track
-        var element = globals.aniDownloader.animes.find(animeInfo => {
-            return animeInfo.title == title;
-        })
-        if (element) {
-            logi(`[UPDATE] ${title} is setup`)
-            element.isSetup = true;
-        } else {
-            logw(`qbt could not mark cached anime as setup - could not find the anime ${title}`)
-        }
+        shared.markAnimeSetup(title)
     }
 }
 
@@ -702,7 +703,7 @@ var anilist = {
 
     queryMediaListCollection: 
 `query ($name: String) {
-    MediaListCollection(userName: $name, type: ANIME, status: CURRENT) {
+    MediaListCollection(userName: $name, type: ANIME) {
         lists {
             name
             entries {
@@ -763,6 +764,11 @@ var anilist = {
 
         var i = 0
         data.data.MediaListCollection.lists.forEach(MediaListGroup => {
+            
+            if (!settings.ANI.LISTS.includes(MediaListGroup.name)) {
+                return
+            }
+
             MediaListGroup.entries.forEach((MediaList, index, array) => {
                 var mediaId = MediaList.mediaId;
 
@@ -832,7 +838,8 @@ var anilist = {
             await qbt.addRule(feed, title)
         } else if (CONSTANTS.MISC.strict) {
             // update feed 
-            const results = await trackers.nyaa.getSearchResults(title)
+            const relaxedTitle = title.replace(/[^a-zA-Z\d\s]/g, " ")
+            const results = await trackers.nyaa.getSearchResults(relaxedTitle)
             const bestEntry = trackers.common.getBestFeedEntry(title, results)
 
             if (bestEntry) {
