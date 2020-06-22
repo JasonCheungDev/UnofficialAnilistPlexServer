@@ -62,6 +62,11 @@ function sleep(ms) {
 
 // CONSTANTS
 const CONSTANTS = {
+    FORMAT: {
+        TV: "TV",
+        MOVIE: "MOVIE",
+        OVA: "OVA"
+    },
     STATUS: {
         CURRENT: 0,
         PLANNING: 1,
@@ -95,8 +100,9 @@ const CONSTANTS = {
 }
 
 class AnimeInfo {
-    constructor(id, name) {
+    constructor(id, name, format) {
         this.mediaId = id       // anilist ID
+        this.format = format    // format (tv,movie,ova) - only special handling for movie
         this.title = name       // title
         this.isSetup = false    // successfully went thru all auto-download procedures
         this.noResults = false  // failed to find any results
@@ -428,6 +434,11 @@ var qbt = {
 
         return parsedCookie
     },
+    getSavePath: function(animeInfo) {
+        const directory = settings.QBT.DOWNLOAD_LOCATION + (animeInfo.format == CONSTANTS.FORMAT.MOVIE ? "Anime Movie/" : "Anime/")
+        const safePath = sanitize(animeInfo.title)
+        return directory + safePath
+    },
     addFeed: async function(feed, title) {
         logi(`[QBT] Adding feed ${feed}`)
 
@@ -495,12 +506,10 @@ var qbt = {
             logi(`Failed to remove RSS feed title ${title} - this is normal for initial setup.`)
         }
     },
-    addRule: async function(feed, title, strictMatchRule) {
+    addRule: async function(feed, title, animeInfo, strictMatchRule) {
         logi(`[QBT] Adding rule ${title}`)
 
         const apiUri = '/api/v2/rss/setRule?'
-
-        const safePath = sanitize(title)
 
         const downloadRule = {
             "enabled": true,
@@ -517,7 +526,7 @@ var qbt = {
             "lastMatch": "",
             "addPaused": false,
             "assignedCategory": "Anime",
-            "savePath": settings.QBT.DOWNLOAD_LOCATION + safePath
+            "savePath": this.getSavePath(animeInfo)
         }
 
         const queryString = querystring.stringify({
@@ -606,16 +615,14 @@ var qbt = {
         dump(response)
         */
     },
-    addTorrent: async function(title, torrentUrl) {
+    addTorrent: async function(title, animeInfo, torrentUrl) {
         logi(`[QBT] Adding torrent: ${torrentUrl} for title: ${title}`)
 
         const apiUri = '/api/v2/torrents/add?'
 
-        const safePath = sanitize(title)
-
         const queryString = querystring.stringify({
             urls: torrentUrl,
-            savepath: settings.QBT.DOWNLOAD_LOCATION + safePath,
+            savepath: this.getSavePath(animeInfo),
             category: "Anime"
         })
 
@@ -654,10 +661,11 @@ var anilist = {
 `query ($id: Int) { # Define which variables will be used in the query (id)
     Media (id: $id, type: ANIME) { # Insert our variables into the query arguments (id) (type: ANIME is hard-coded in the query)
         id
+        format
         title {
-        romaji
-        english
-        native
+            romaji
+            english
+            native
         }
     }
 }`,
@@ -807,15 +815,16 @@ var anilist = {
         dump(data.data.Media.title)
 
         // track data 
-        var mediaId = data.data.Media.id;
+        var mediaId = data.data.Media.id
         var title = data.data.Media.title.romaji
+        var format = data.data.Media.format
         var animeInfo = globals.aniDownloader.animes.find(element => {
-            return element.mediaId == mediaId;
+            return element.mediaId == mediaId
         })
 
         if (!animeInfo) {
-            animeInfo = new AnimeInfo(mediaId, title);
-            globals.aniDownloader.animes.push(animeInfo);
+            animeInfo = new AnimeInfo(mediaId, title, format)
+            globals.aniDownloader.animes.push(animeInfo)
         }
 
         await anilist.setupAutoDownloading(animeInfo)
@@ -835,7 +844,7 @@ var anilist = {
             // manual mode set
             let feed = trackers.nyaa.generateRssFeedUrl(animeInfo.manual, "", "", false)
             await qbt.addFeed(feed, title)
-            await qbt.addRule(feed, title)
+            await qbt.addRule(feed, title, animeInfo)
         } else if (CONSTANTS.MISC.strict) {
             // update feed 
             const relaxedTitle = title.replace(/[^a-zA-Z\d\s]/g, " ")
@@ -844,11 +853,11 @@ var anilist = {
 
             if (bestEntry) {
                 if (bestEntry.isBatch) {
-                    await qbt.addTorrent(title, bestEntry.link)
+                    await qbt.addTorrent(title, animeInfo, bestEntry.link)
                 } else {
                     let bestFeed = trackers.nyaa.generateRssFeedUrl(bestEntry.title, bestEntry.quality, bestEntry.group, true)
                     await qbt.addFeed(bestFeed, title)
-                    await qbt.addRule(bestFeed, title, `\] ${bestEntry.title} -`)
+                    await qbt.addRule(bestFeed, title, animeInfo, `\] ${bestEntry.title} -`)
                 }
 
                 if (bestEntry.seeders == 0) {
@@ -864,7 +873,7 @@ var anilist = {
             // update feed (no checks - just add)
             let feed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS)
             await qbt.addFeed(feed, title)
-            await qbt.addRule(feed, title)
+            await qbt.addRule(feed, title, animeInfo)
         }
     }
 }
@@ -985,11 +994,29 @@ function loadData() {
 
 // Updates data to new format 
 function migrateData() {
-    globals.aniDownloader.animes.forEach(animeInfo => {
+    let dataChanged = false
+    for (let animeInfo of globals.aniDownloader.animes) {
         if (animeInfo.noResults === undefined) {
+            logi(`Migrating data for ${animeInfo.title} - adding noResults`)
             animeInfo.noResults = false
+            dataChanged = true
         }
-    })
+        if (animeInfo.noSeeders !== undefined) {
+            logi(`Migrating data for ${animeInfo.title} - adding noSeeders`)
+            delete animeInfo.noSeeders
+            dataChanged = true
+        }
+        if (animeInfo.format === undefined) {
+            logi(`Migrating data for ${animeInfo.title} - adding format`)
+            animeInfo.format = CONSTANTS.FORMAT.TV
+            dataChanged = true
+        }
+    }
+
+    if (dataChanged) {
+        logi("Migration occurred, resaving data")
+        saveData()
+    }
 }
 
 // Gets cached data
@@ -1010,7 +1037,7 @@ process.on('SIGINT', function() {
 });
 
 
-async function main() {
+function main() {
     loadData()
     migrateData()
 
