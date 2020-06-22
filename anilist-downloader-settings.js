@@ -9,13 +9,13 @@ module.exports = {
         PORT: 8080,
         USERNAME: "admin",
         PASSWORD: "password",
-        DOWNLOAD_LOCATION: "C:/Anime/"
+        DOWNLOAD_LOCATION: "C:/Videos/" // Will create subfolders for each format (currently only Anime + Anime Movies)
     },
     PLEX: {
         EMAIL: "plex@gmail.com",
         PASSWORD: "password",
-        LIBRARY_NAME: "LibraryName" // case sensitive
-        MULTIPLE_SERVERS_PRESENT: true // set to true if you're part of multiple servers
+        LIBRARY_NAME: "LibraryName",    // case sensitive
+        MULTIPLE_SERVERS_PRESENT: true  // set to true if you're part of multiple servers
     },
     WEB: {
         TITLE: "[UNOFFICIAL] AniList Plex Media Server"
