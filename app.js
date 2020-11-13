@@ -71,6 +71,10 @@ app.get('/anime/:mediaId', function(request, resource) {
   }
 })
 
+app.get('/help', function(req, res) {
+  res.render('help')
+})
+
 app.post('/set_anime_manual_rule', function(req, res) {
   let rule = req.body.rule
   let id = req.body.mediaId
