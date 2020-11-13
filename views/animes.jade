@@ -5,6 +5,11 @@ block content
     h3.primary-text Last Updated
     .body-container-contents
       p= lastUpdated
+      .warning-text
+        if isWorkActive
+          p The server is currently working, results may not be accurate!
+      form(method='POST' action='/update')
+          button(type='submit') Update
 
   .body-container
     h3.primary-text Anime List
@@ -20,5 +25,3 @@ block content
           else
             li
               a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title}
-
-      button(onclick="onUpdateButtonClick()") Update

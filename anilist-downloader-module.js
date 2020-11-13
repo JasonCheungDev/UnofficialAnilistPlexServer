@@ -136,7 +136,26 @@ var globals = {
         users: [],
         lastUpdated: Date.now(),
         lastUpdatedPretty: ""
+    },
+    workActive: 0 // currently saving this so we can track if we were in an active/invalid state
+}
+
+function incrementWork() {
+    if (globals.workActive == 0) {
+        logi(`Work Tracking: Starting at ${now()}`)
     }
+    globals.workActive++
+}
+
+function decrementWork() {
+    if (globals.workActive == 1) {
+        logi(`Work Tracking: Finished at ${now()}`)
+    }
+    else if (globals.workActive == 0) {
+        loge(`Work Tracking: decrement work called when no work was active! work: ${globals.workActive}`)
+        return
+    }
+    globals.workActive--
 }
 
 // APPLICATION
@@ -770,6 +789,8 @@ var anilist = {
     handleUserListdata: function(data) {
         logi("=====");
 
+        decrementWork()
+
         var i = 0
         data.data.MediaListCollection.lists.forEach(MediaListGroup => {
             
@@ -788,6 +809,9 @@ var anilist = {
                     logi(`aniApi: ${mediaId} is already setup - ignoring.`)
                     return;
                 }
+
+                // work necessary
+                incrementWork()
 
                 var iVar = {
                     id: mediaId
@@ -808,7 +832,8 @@ var anilist = {
     },
 
     handleError: function(error) {
-        loge(error);
+        loge(error)
+        decrementWork()
     },
 
     handleMediaData: async function(data) {
@@ -827,6 +852,8 @@ var anilist = {
             globals.aniDownloader.animes.push(animeInfo)
         }
 
+        decrementWork()
+        
         await anilist.setupAutoDownloading(animeInfo)
     },
 
@@ -838,6 +865,9 @@ var anilist = {
             logi(`${title} is already setup - skipping setting up auto-downloading`)
             return
         }
+
+        // work necessary
+        incrementWork()
 
         // update rules 
         if (animeInfo.manual) {
@@ -867,7 +897,6 @@ var anilist = {
                 // no results - failed
                 animeInfo.noResults = true
                 logw(`Unable to find any results for ${title} - marking as failed`)
-                return
             }
         } else {
             // update feed (no checks - just add)
@@ -875,6 +904,8 @@ var anilist = {
             await qbt.addFeed(feed, title)
             await qbt.addRule(feed, title, animeInfo)
         }
+
+        decrementWork()
     }
 }
 
@@ -925,9 +956,17 @@ function setManualRule(mediaId, rule) {
 
 // Checks all AniList users and downloads all anime in the "Watching" list.
 function updateAll() {
+    logi("Module updating all")
+
+    if (isWorkActive()) {
+        logw("Work is already active - skipping updateAll()")
+        return
+    }
 
     globals.aniDownloader.users.forEach((userInfo, index, array) => {
         
+        incrementWork()
+
         // stagger requests
         setTimeout(() => {
 
@@ -990,6 +1029,11 @@ function loadData() {
         loge("Failed to load cached data")
         saveData() // most likely does not exists, create it now.
     }
+
+    if (globals.workActive > 0) {
+        loge("loadData() active work count was not 0!")
+        globals.workActive = 0
+    }
 }
 
 // Updates data to new format 
@@ -1013,6 +1057,12 @@ function migrateData() {
         }
     }
 
+    if (globals.workActive === undefined) {
+        logi(`Migrating data for globals - adding workActive`)
+        globals.workActive = 0
+        dataChanged = true
+    }
+
     if (dataChanged) {
         logi("Migration occurred, resaving data")
         saveData()
@@ -1023,6 +1073,12 @@ function migrateData() {
 function getData() {
     logi("Getting cached data")
     return globals.aniDownloader
+}
+
+// Indicator if the module is currently working
+function isWorkActive() {
+    logi("Checking if work is active")
+    return globals.workActive > 0
 }
 
 process.on('exit', () => {
@@ -1061,3 +1117,4 @@ module.exports.updateAll = updateAll
 module.exports.getData = getData
 module.exports.saveData = saveData
 module.exports.loadData = loadData
+module.exports.isWorkActive = isWorkActive

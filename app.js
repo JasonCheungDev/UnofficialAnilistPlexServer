@@ -35,6 +35,7 @@ app.get('/users', function(request, resource) {
   resource.render('users', {
     title: "Users",
     users: aniDownloader.getData().users,
+    isWorkActive: aniDownloader.isWorkActive(),
     lastUpdated: aniDownloader.getData().lastUpdatedPretty
   })
 })
@@ -52,6 +53,7 @@ app.get('/animes', function(request, resource) {
   resource.render('animes', {
     title: "Animes",
     animes: animes,
+    isWorkActive: aniDownloader.isWorkActive(),
     lastUpdated: aniDownloader.getData().lastUpdatedPretty
   })
 })
@@ -125,9 +127,10 @@ app.post('/remove_plex_email', function(request, resource) {
   request.send("To remove yourself please login to your Plex account.")
 })
 
-app.put('/update', function(request, resource) {
+app.post('/update', function(req, res) {
   console.log("UPDATING")
   aniDownloader.updateAll();
+  res.redirect("back");
 })
 
 // catch 404 and forward to error handler

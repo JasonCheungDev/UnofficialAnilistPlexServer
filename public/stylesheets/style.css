@@ -41,6 +41,11 @@ body {
   position: relative;
 }
 
+.img-size-parent {
+  max-width:100%;
+  max-height:100%;
+}
+
 .body-container {
   width: 800px;
   margin: 1em auto;
@@ -86,6 +91,10 @@ button {
 
 .primary-text {
   color: rgb(92, 114, 138)
+}
+
+.warning-text {
+  color: orange
 }
 
 .error-text {
