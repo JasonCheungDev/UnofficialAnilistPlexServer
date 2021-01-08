@@ -253,7 +253,7 @@ var trackers = {
             logi(`Parsing info from feed entry - ${entry}`)
 
             // Standard Match
-            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+S?(\d\d)\s+\[(.+?)\]/
+            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+(?:S\d\dE)?(\d\d)\s+\[(.+?)\]/i
             const match = entry.match(regexPattern)
             if (match) {
                 return new FeedEntry(link, match[1], match[2], match[3], this.parseQualityFromString(match[4]), false, seeders)
@@ -533,7 +533,7 @@ var qbt = {
 
         const downloadRule = {
             "enabled": true,
-            "mustContain": strictMatchRule ? strictMatchRule : "",
+            "mustContain": strictMatchRule ? strictMatchRule.replace(/\(/g, "\\(").replace(/\)/g, "\\)") : "", // escape brackets if detected
             "mustNotContain": strictMatchRule ? "batch" : "",
             "useRegex": strictMatchRule ? true : false,
             "episodeFilter": "",
