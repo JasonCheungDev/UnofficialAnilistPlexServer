@@ -16,7 +16,10 @@ block content
     .body-container-contents
       div
         each item in animes
-          if (item.noResults)
+          if (item.isBlacklisted)
+            li
+              a(href="/anime/#{item.mediaId}" class="error-text") #{item.title} [BLACKLISTED]
+          else if (item.noResults)
             li
               a(href="/anime/#{item.mediaId}" class="error-text") #{item.title} [NO RESULTS]
           else if (item.manual)

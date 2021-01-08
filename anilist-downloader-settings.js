@@ -3,7 +3,10 @@ module.exports = {
         DELAY: 10000, 
     },
     ANI: {
-        LISTS: [ "Watching", "APS-Request" ]
+        LISTS: [ "Watching", "APS-Request" ],
+        BLACKLISTED_ORIGINS: [ 
+            "CN" // by default "CN" is backlisted as it'll generally have no results causing a lot of unnecessary overhead.
+        ],
     },
     QBT: {
         PORT: 8080,

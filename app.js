@@ -45,8 +45,8 @@ app.get('/animes', function(request, resource) {
   // slightly dangerous as we're reordering the source array
   animes.sort((lhs, rhs) => {
     const LARGE = 10000
-    const l = lhs.noResults ? LARGE : 0
-    const r = rhs.noResults ? LARGE : 0
+    const l = (lhs.noResults || lhs.isBlacklisted) ? LARGE : 0
+    const r = (rhs.noResults || rhs.isBlacklisted) ? LARGE : 0
     return lhs.title.localeCompare(rhs.title) + (l - r)
   })
 

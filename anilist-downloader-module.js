@@ -106,6 +106,7 @@ class AnimeInfo {
         this.title = name       // title
         this.isSetup = false    // successfully went thru all auto-download procedures
         this.noResults = false  // failed to find any results
+        this.isBlacklisted = false// blacklisted (will not download)
         this.manual = ""        // manual title to search for
     }
 }
@@ -686,6 +687,7 @@ var anilist = {
             english
             native
         }
+        countryOfOrigin
     }
 }`,
 
@@ -843,15 +845,24 @@ var anilist = {
         var mediaId = data.data.Media.id
         var title = data.data.Media.title.romaji
         var format = data.data.Media.format
+        var country = data.data.Media.countryOfOrigin
         var animeInfo = globals.aniDownloader.animes.find(element => {
             return element.mediaId == mediaId
         })
 
         if (!animeInfo) {
             animeInfo = new AnimeInfo(mediaId, title, format)
+            
+            // blacklist check
+            if (settings.ANI.BLACKLISTED_ORIGINS.includes(country)) {
+                animeInfo.isBlacklisted = true
+                animeInfo.isSetup = true
+                logi(`${title} is blacklisted - will not download`)
+            }
+            
             globals.aniDownloader.animes.push(animeInfo)
         }
-
+        
         decrementWork()
         
         await anilist.setupAutoDownloading(animeInfo)
@@ -1053,6 +1064,11 @@ function migrateData() {
         if (animeInfo.format === undefined) {
             logi(`Migrating data for ${animeInfo.title} - adding format`)
             animeInfo.format = CONSTANTS.FORMAT.TV
+            dataChanged = true
+        }
+        if (animeInfo.isBlacklisted === undefined) {
+            logi(`Migrating data for ${animeInfo.title} - adding isBlacklisted`)
+            animeInfo.isBlacklisted = false
             dataChanged = true
         }
     }
