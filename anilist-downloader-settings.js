@@ -7,6 +7,9 @@ module.exports = {
         BLACKLISTED_ORIGINS: [ 
             "CN" // by default "CN" is backlisted as it'll generally have no results causing a lot of unnecessary overhead.
         ],
+        BLACKLISTED_TITLE_WORDS: [
+            "v0" // some groups use v0 to indicate a first pass in subbing, meaning a better version should be released shortly
+        ]
     },
     QBT: {
         PORT: 8080,

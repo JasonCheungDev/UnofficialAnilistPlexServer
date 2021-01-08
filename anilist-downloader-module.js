@@ -526,15 +526,31 @@ var qbt = {
             logi(`Failed to remove RSS feed title ${title} - this is normal for initial setup.`)
         }
     },
+    /**
+     * Adds an auto-download rule for an RSS feed. Without an auto-download rule nothing from a feed will be downloaded.
+     * 
+     * @param {*} feed The RSS feed URL.
+     * @param {*} title The title of the anime.
+     * @param {*} animeInfo The AnimeInfo object for tracking.
+     * @param {*} strictMatchRule A filter string that a feed entry title must have. If not defined everything in the feed will be downloaded.
+     */ 
     addRule: async function(feed, title, animeInfo, strictMatchRule) {
         logi(`[QBT] Adding rule ${title}`)
 
         const apiUri = '/api/v2/rss/setRule?'
 
+        const additionalIgnoreRules = []
+        if (strictMatchRule) {
+            // In general when a strictMatchRule is set we want to ignore any batch results (the batch flow handles that).
+            additionalIgnoreRules.push("batch")
+        }
+        // TODO: May want filter out blacklisted words if its contained in the strict match rule. (nothing will download)
+        const ignore = settings.ANI.BLACKLISTED_TITLE_WORDS.concat(additionalIgnoreRules).join("|")
+
         const downloadRule = {
             "enabled": true,
             "mustContain": strictMatchRule ? strictMatchRule.replace(/\(/g, "\\(").replace(/\)/g, "\\)") : "", // escape brackets if detected
-            "mustNotContain": strictMatchRule ? "batch" : "",
+            "mustNotContain": ignore,
             "useRegex": strictMatchRule ? true : false,
             "episodeFilter": "",
             "smartFilter": false,
