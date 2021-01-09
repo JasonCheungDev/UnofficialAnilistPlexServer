@@ -15,13 +15,38 @@ block content
     h3.primary-text Anime List
     .body-container-contents
       div
-        each item in animes
-          if (item.noResults)
-            li
-              a(href="/anime/#{item.mediaId}" class="error-text") #{item.title} [NO RESULTS]
-          else if (item.manual)
-            li
-              a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title} [MANUAL RULE]
-          else
-            li
-              a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title}
+        table(id="animes-table")
+          tr(class="primary-text")
+            th Title
+            th Notes
+          each item in animes
+            if (item.manual)
+              tr(class="primary-text")
+                td 
+                  a(href="/anime/#{item.mediaId}") #{item.title}
+                td(class="note-col")
+                  span [MANURAL RULE]
+            else if (item.isBlacklisted)
+              tr(class="error-text")
+                td 
+                  a(href="/anime/#{item.mediaId}") #{item.title}
+                td(class="note-col")
+                  span [BLACKLISTED]
+            else if (item.noResults)
+              tr(class="error-text")
+                td 
+                  a(href="/anime/#{item.mediaId}") #{item.title}
+                td(class="note-col")
+                  span [NO RESULTS]
+            else if (item.downloadTime)
+              tr(class="warning-text")
+                td
+                  a(href="/anime/#{item.mediaId}") #{item.title}
+                td(class="note-col")
+                  span [Downloads on #{new Date(item.downloadTime).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}]
+            else
+              tr(class="primary-text")
+                td
+                  a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title}
+                td(class="note-col")
+                  span
