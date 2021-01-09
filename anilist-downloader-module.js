@@ -91,7 +91,7 @@ const CONSTANTS = {
     CONSOLE: {
         PREFIX: "[aniDownloader]:",
         RESET: "\x1b[0m",
-        RED: "\x1b[0m",
+        RED: "\x1b[31m",
         YELLOW: "\x1b[33m"
     },
     MISC: {
@@ -101,13 +101,33 @@ const CONSTANTS = {
 
 class AnimeInfo {
     constructor(id, name, format) {
+        if (id === undefined || id === 0) {
+            loge("Attempting to make an AnimeInfo with no ID!")
+        }
+        // AniList Data
         this.mediaId = id       // anilist ID
         this.format = format    // format (tv,movie,ova) - only special handling for movie
         this.title = name       // title
+        this.startDate = null   // when the first episode is airing. will be null if the specific day is TBA.
+        // Internal Data
         this.isSetup = false    // successfully went thru all auto-download procedures
         this.noResults = false  // failed to find any results
         this.isBlacklisted = false// blacklisted (will not download)
         this.manual = ""        // manual title to search for
+        this.downloadTime = null// if set indicates when this anime will be downloaded
+    }
+
+    // note: static functions as data is reloaded as a plain object (without this prototype)
+
+    static isStartDateConfirmed(animeInfo) {
+        return (animeInfo.startDate
+            && animeInfo.startDate.day != null
+            && animeInfo.startDate.month != null
+            && animeInfo.startDate.year != null)
+    }
+
+    static isAllDataLoaded(animeInfo) {
+        return (animeInfo.format && animeInfo.title && AnimeInfo.isStartDateConfirmed(animeInfo))
     }
 }
 
@@ -130,6 +150,49 @@ class FeedEntry {
     }
 }
 
+class Worker {
+    constructor(name, interval) {
+        this.name = name 
+        this.interval = interval
+        this.jobs = []
+        this.timer = null
+    }
+
+    addJob(jobCallback) {
+        this.jobs.push(jobCallback)
+    }
+
+    isWorking() {
+        return this.timer != null
+    }
+
+    // TODO: Can probably remove this and start as soon as a job is added.
+    start() {
+        if (this.timer != null) {
+            loge(`Attempted to start a worker name: ${this.name} when it already started.`)
+            return
+        }
+        const worker = this
+        this.timer = setTimeout(() => { worker._executeNextJob()}, 0)
+    }
+
+    // TODO: Preferably this would wait for the job to actually finish (if async)
+    _executeNextJob() {
+        console.log(`Executing next job for worker ${this.name}. Count: ${this.jobs.length}`)
+
+        const callback = this.jobs.shift()
+        callback()
+
+        if (this.jobs.length > 0) {
+            const worker = this
+            setTimeout(() => { worker._executeNextJob() }, worker.interval)
+        } else {
+            console.log(`Worker ${this.name} : All jobs finished!`)
+            this.timer = null
+        }
+    }
+}
+
 // RUNTIME + SERIALIZED DATA
 var globals = {
     aniDownloader: {
@@ -137,26 +200,12 @@ var globals = {
         users: [],
         lastUpdated: Date.now(),
         lastUpdatedPretty: ""
-    },
-    workActive: 0 // currently saving this so we can track if we were in an active/invalid state
+    }
 }
 
-function incrementWork() {
-    if (globals.workActive == 0) {
-        logi(`Work Tracking: Starting at ${now()}`)
-    }
-    globals.workActive++
-}
-
-function decrementWork() {
-    if (globals.workActive == 1) {
-        logi(`Work Tracking: Finished at ${now()}`)
-    }
-    else if (globals.workActive == 0) {
-        loge(`Work Tracking: decrement work called when no work was active! work: ${globals.workActive}`)
-        return
-    }
-    globals.workActive--
+const workers = {
+    ani: new Worker("AniWorker", settings.SHARED.DELAY),
+    nyaa: new Worker("NyaaWorker", settings.SHARED.DELAY)
 }
 
 // APPLICATION
@@ -704,6 +753,11 @@ var anilist = {
             native
         }
         countryOfOrigin
+        startDate {
+            year
+            month
+            day
+        }
     }
 }`,
 
@@ -804,57 +858,42 @@ var anilist = {
 
     // QUERY SPECIFIC
 
-    handleUserListdata: function(data) {
-        logi("=====");
-
-        decrementWork()
+    handleUserListdata: async function(data) {
+        logi("handleUserListdata");
 
         var i = 0
-        data.data.MediaListCollection.lists.forEach(MediaListGroup => {
-            
+        for (const MediaListGroup of data.data.MediaListCollection.lists) {
+           
+            // list name check
             if (!settings.ANI.LISTS.includes(MediaListGroup.name)) {
-                return
+                continue
             }
 
-            MediaListGroup.entries.forEach((MediaList, index, array) => {
+            for (const MediaList of MediaListGroup.entries) {
                 var mediaId = MediaList.mediaId;
 
-                // check if necessary 
+                // retrieve existing data 
                 var animeInfo = globals.aniDownloader.animes.find(element => {
                     return element.mediaId == mediaId;
                 })
-                if (animeInfo && animeInfo.isSetup) {
-                    logi(`aniApi: ${mediaId} is already setup - ignoring.`)
-                    return;
+
+                // new entry check
+                if (!animeInfo) {
+                    logi(`New anime detected. Media ID: ${mediaId}`)
+                    animeInfo = new AnimeInfo(mediaId)
+                    globals.aniDownloader.animes.push(animeInfo)
                 }
-
-                // work necessary
-                incrementWork()
-
-                var iVar = {
-                    id: mediaId
-                }
-
-                var iReq = anilist.generateRequest(anilist.queryAnime, iVar)
-
-                // stagger requests
-                setTimeout(() => {
-                    fetch(iReq.url, iReq.options)
-                        .then(anilist.handleJsonResponse)
-                        .then(anilist.handleMediaData)
-                        .catch(anilist.handleError)
-                }, settings.SHARED.DELAY * i++)
-
-            });
-        }); // pass scope into block
+            }
+        }
     },
 
     handleError: function(error) {
-        loge(error)
-        decrementWork()
+        loge("Error detected")
+        dump(error)
     },
 
     handleMediaData: async function(data) {
+        logi(`Retrieved media info for ${data.data.Media.id}. Title:`)
         dump(data.data.Media.title)
 
         // track data 
@@ -862,39 +901,51 @@ var anilist = {
         var title = data.data.Media.title.romaji
         var format = data.data.Media.format
         var country = data.data.Media.countryOfOrigin
+        var startDate = data.data.Media.startDate
         var animeInfo = globals.aniDownloader.animes.find(element => {
             return element.mediaId == mediaId
         })
 
+        // new entry - create
         if (!animeInfo) {
             animeInfo = new AnimeInfo(mediaId, title, format)
-            
-            // blacklist check
-            if (settings.ANI.BLACKLISTED_ORIGINS.includes(country)) {
-                animeInfo.isBlacklisted = true
-                animeInfo.isSetup = true
-                logi(`${title} is blacklisted - will not download`)
-            }
-            
             globals.aniDownloader.animes.push(animeInfo)
         }
-        
-        decrementWork()
-        
-        await anilist.setupAutoDownloading(animeInfo)
+
+        // fill in data that can be missing
+        animeInfo.title = title
+        animeInfo.format = format
+        animeInfo.startDate = startDate
+
+        // blacklist check
+        if (settings.ANI.BLACKLISTED_ORIGINS.includes(country)) {
+            animeInfo.isBlacklisted = true
+            animeInfo.isSetup = true
+            logi(`${title} is blacklisted - will not download`)
+        }
     },
 
-    setupAutoDownloading: async function(animeInfo) {
+    trySetupAutoDownloading: async function(animeInfo) {
         const title = animeInfo.title
-        logi(title)
+        logi(`trySetupAutoDownloading for ${title}`)
 
+        // setup check
         if (animeInfo.isSetup) {
             logi(`${title} is already setup - skipping setting up auto-downloading`)
             return
         }
 
-        // work necessary
-        incrementWork()
+        // airing check
+        const startTimestamp = new Date(animeInfo.startDate.year, animeInfo.startDate.month - 1, animeInfo.startDate.day - 1)
+        const downloadTime = startTimestamp.getTime() + settings.ANI.REQUIRED_AIRING_DURATION
+        const nowTime = new Date().getTime()
+        if (nowTime < downloadTime) {
+            logi(`${title} has not aired long enough - skipping setting up auto-downloading`)
+            animeInfo.downloadTime = downloadTime // view info
+            return
+        } else {
+            animeInfo.downloadTime = null         // view info
+        }
 
         // update rules 
         if (animeInfo.manual) {
@@ -931,8 +982,6 @@ var anilist = {
             await qbt.addFeed(feed, title)
             await qbt.addRule(feed, title, animeInfo)
         }
-
-        decrementWork()
     }
 }
 
@@ -992,23 +1041,68 @@ function updateAll() {
 
     globals.aniDownloader.users.forEach((userInfo, index, array) => {
         
-        incrementWork()
-
-        // stagger requests
-        setTimeout(() => {
+        // Phase 1. Querying all user lists
+        workers.ani.addJob(() => {
+            logi(`Job: Retrieving user list for ${userInfo.username}`)
 
             userInfo.lastUpdated = now()
 
             var request = anilist.generateRequest(anilist.queryMediaListCollection, { name: userInfo.username });
-    
+
             // Make the HTTP Api request
             fetch(request.url, request.options)
                 .then(anilist.handleJsonResponse)
                 .then(anilist.handleUserListdata)
                 .catch(anilist.handleError);
-    
-        }, settings.SHARED.DELAY * index)
+        })
+        
+    })
 
+    workers.ani.start()
+
+    // Phase 2. Retrieving anime data
+    workers.ani.addJob(() => {
+        logi(`Job: Scanning for media missing info`)
+
+        for (const animeInfo of globals.aniDownloader.animes) {
+            if (!AnimeInfo.isAllDataLoaded(animeInfo)) {
+                const mediaId = animeInfo.mediaId
+                logi(`aniApi: ${mediaId} missing data - retrieving`)
+
+                workers.ani.addJob(() => {
+                    logi(`Job: Retrieving media data for ${mediaId}`)
+
+                    var iVar = {
+                        id: mediaId
+                    }
+
+                    var iReq = anilist.generateRequest(anilist.queryAnime, iVar)
+
+                    fetch(iReq.url, iReq.options)
+                        .then(anilist.handleJsonResponse)
+                        .then(anilist.handleMediaData)
+                        .catch(anilist.handleError)
+                })
+            }
+        }
+
+        // Phase 3. Setting up auto-downloads (TODO: We can optimize this by having above schedule the nyaa jobs right away)
+        workers.ani.addJob(() => {
+            logi(`Job: Scanning for media that requires auto-downloading`)
+
+            for (const animeInfo of globals.aniDownloader.animes) {
+                if (!animeInfo.isSetup && AnimeInfo.isAllDataLoaded(animeInfo)) {
+                    logi(`Requesting auto-downloading job for ${animeInfo.title}`)
+
+                    workers.nyaa.addJob(() => {
+                        logi(`Job: Setting up auto-downloading for ${animeInfo.title}`)
+                        anilist.trySetupAutoDownloading(animeInfo) 
+                    })
+                }
+            }
+
+            workers.nyaa.start()
+        })
     })
 
     globals.aniDownloader.lastUpdatedPretty = now()
@@ -1020,7 +1114,7 @@ async function updateAnimesOnly() {
         if (animeInfo.isSetup) {
             continue
         }
-        await anilist.setupAutoDownloading(animeInfo)
+        await anilist.trySetupAutoDownloading(animeInfo)
         await sleep(settings.SHARED.DELAY)
     }
 }
@@ -1056,11 +1150,6 @@ function loadData() {
         loge("Failed to load cached data")
         saveData() // most likely does not exists, create it now.
     }
-
-    if (globals.workActive > 0) {
-        loge("loadData() active work count was not 0!")
-        globals.workActive = 0
-    }
 }
 
 // Updates data to new format 
@@ -1089,9 +1178,9 @@ function migrateData() {
         }
     }
 
-    if (globals.workActive === undefined) {
-        logi(`Migrating data for globals - adding workActive`)
-        globals.workActive = 0
+    if (globals.workActive !== undefined) {
+        logi(`Migrating data for globals - removing workActive`)
+        delete globals.workActive
         dataChanged = true
     }
 
@@ -1110,7 +1199,7 @@ function getData() {
 // Indicator if the module is currently working
 function isWorkActive() {
     logi("Checking if work is active")
-    return globals.workActive > 0
+    return workers.ani.isWorking() || workers.nyaa.isWorking()
 }
 
 process.on('exit', () => {

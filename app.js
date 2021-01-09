@@ -41,13 +41,12 @@ app.get('/users', function(request, resource) {
 })
 
 app.get('/animes', function(request, resource) {
-  var animes = aniDownloader.getData().animes
-  // slightly dangerous as we're reordering the source array
+  var animes = aniDownloader.getData().animes.filter((entry) => { return entry.title })
   animes.sort((lhs, rhs) => {
-    const LARGE = 10000
-    const l = (lhs.noResults || lhs.isBlacklisted) ? LARGE : 0
-    const r = (rhs.noResults || rhs.isBlacklisted) ? LARGE : 0
-    return lhs.title.localeCompare(rhs.title) + (l - r)
+    // const LARGE = 10000
+    // const l = (lhs.noResults || lhs.isBlacklisted) ? LARGE : 0
+    // const r = (rhs.noResults || rhs.isBlacklisted) ? LARGE : 0
+    return lhs.title.localeCompare(rhs.title) // + (l - r)
   })
 
   resource.render('animes', {
