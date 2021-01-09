@@ -92,13 +92,22 @@ button {
 .primary-text {
   color: rgb(92, 114, 138)
 }
+.primary-text a {
+  color: rgb(92, 114, 138)
+}
 
 .warning-text {
   color: orange
 }
+.warning-text a {
+  color: orange
+}
 
 .error-text {
-  color: lightcoral;
+  color: lightcoral
+}
+.error-text a {
+  color: lightcoral
 }
 
 a {
@@ -217,3 +226,13 @@ a.logo * {
 /*
 color:rgb(237, 241, 245);
 */
+
+/* Page: Animes */
+#animes-table {
+  border-spacing: 10px;
+  text-align: left;
+}
+
+#animes-table .note-col {
+  vertical-align: top;
+}
