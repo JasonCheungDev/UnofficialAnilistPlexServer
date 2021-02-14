@@ -302,7 +302,7 @@ var trackers = {
             logi(`Parsing info from feed entry - ${entry}`)
 
             // Standard Match
-            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+(?:S\d\dE)?(\d\d)\s+\[(.+?)\]/i
+            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+(?:S\d\dE)?(\d\d)\s+[\[\(](.+?)[\]\)]/i
             const match = entry.match(regexPattern)
             if (match) {
                 return new FeedEntry(link, match[1], match[2], match[3], this.parseQualityFromString(match[4]), false, seeders)
