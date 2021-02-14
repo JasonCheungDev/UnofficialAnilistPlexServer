@@ -302,7 +302,7 @@ var trackers = {
             logi(`Parsing info from feed entry - ${entry}`)
 
             // Standard Match
-            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+(?:S\d\dE)?(\d\d)\s+\[(.+?)\]/i
+            const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+(?:S\d\dE)?(\d\d)\s+[\[\(](.+?)[\]\)]/i
             const match = entry.match(regexPattern)
             if (match) {
                 return new FeedEntry(link, match[1], match[2], match[3], this.parseQualityFromString(match[4]), false, seeders)
@@ -344,6 +344,13 @@ var trackers = {
                 .replace(/\..{3}$/, "")
                 .trim()
         },
+
+        /**
+         * The default subbing group evaluation for entry comparison 
+         * if the group wasn't explicitly defined in preferences.
+         * Lazily initialized when required.
+         */
+        defaultGroupEvaluation: null,
 
         /**
          * Finds the best entry given results.
@@ -392,7 +399,33 @@ var trackers = {
                 return error
             }
 
+            // subbing group evaluator
+            function getGroupEvaluator(group) {
+                for (let i = 0; i < settings.QBT.GROUP_PREFERENCE; i++) {
+                    if (group == settings.QBT.GROUP_PREFERENCE[i]) {
+                        return i
+                    }
+                }
+
+                // use default group evaluation
+                if (trackers.common.defaultGroupEvaluation === null) {
+                    for (let i = 0; i < settings.QBT.GROUP_PREFERENCE; i++) {
+                        if (group == "ANY") {
+                            trackers.common.defaultGroupEvaluation = 1
+                        }
+                    }       
+                }
+                return trackers.common.defaultGroupEvaluation
+            }
+
             function entryComparator(lhs, rhs) {
+                // subbing group preference
+                const lGroup = getGroupEvaluator(lhs.group)
+                const rGroup = getGroupEvaluator(rhs.group)
+                if (lGroup != rGroup) {
+                    return lGroup - rGroup
+                }
+
                 // best title
                 const l = titleEvaluator(originalTitle, lhs)
                 const r = titleEvaluator(originalTitle, rhs)

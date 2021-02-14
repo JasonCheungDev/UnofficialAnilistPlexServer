@@ -16,7 +16,11 @@ module.exports = {
         PORT: 8080,
         USERNAME: "admin",
         PASSWORD: "password",
-        DOWNLOAD_LOCATION: "C:/Videos/" // Will create subfolders for each format (currently only Anime + Anime Movies)
+        DOWNLOAD_LOCATION: "C:/Videos/", // Will create subfolders for each format (currently only Anime + Anime Movies)
+        GROUP_PREFERENCE: [
+            "ANY",
+            "Erai-raws"
+        ]
     },
     PLEX: {
         EMAIL: "plex@gmail.com",
