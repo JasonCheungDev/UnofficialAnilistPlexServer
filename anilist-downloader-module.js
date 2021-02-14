@@ -346,6 +346,13 @@ var trackers = {
         },
 
         /**
+         * The default subbing group evaluation for entry comparison 
+         * if the group wasn't explicitly defined in preferences.
+         * Lazily initialized when required.
+         */
+        defaultGroupEvaluation: null,
+
+        /**
          * Finds the best entry given results.
          * 
          * @param {String} originalTitle The original title (from AniList)
@@ -392,7 +399,33 @@ var trackers = {
                 return error
             }
 
+            // subbing group evaluator
+            function getGroupEvaluator(group) {
+                for (let i = 0; i < settings.QBT.GROUP_PREFERENCE; i++) {
+                    if (group == settings.QBT.GROUP_PREFERENCE[i]) {
+                        return i
+                    }
+                }
+
+                // use default group evaluation
+                if (trackers.common.defaultGroupEvaluation === null) {
+                    for (let i = 0; i < settings.QBT.GROUP_PREFERENCE; i++) {
+                        if (group == "ANY") {
+                            trackers.common.defaultGroupEvaluation = 1
+                        }
+                    }       
+                }
+                return trackers.common.defaultGroupEvaluation
+            }
+
             function entryComparator(lhs, rhs) {
+                // subbing group preference
+                const lGroup = getGroupEvaluator(lhs.group)
+                const rGroup = getGroupEvaluator(rhs.group)
+                if (lGroup != rGroup) {
+                    return lGroup - rGroup
+                }
+
                 // best title
                 const l = titleEvaluator(originalTitle, lhs)
                 const r = titleEvaluator(originalTitle, rhs)
