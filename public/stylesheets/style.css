@@ -77,6 +77,10 @@ button {
   border-radius: 1000px;
 }
 
+.plex-button:disabled {
+  opacity: 0.5;
+}
+
 .anilist-link {
   color:rgb(61,180,242);
 }
