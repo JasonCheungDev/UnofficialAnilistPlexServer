@@ -78,6 +78,7 @@ app.post('/set_anime_manual_rule', function(req, res) {
   let rule = req.body.rule
   let id = req.body.mediaId
   aniDownloader.setManualRule(id, rule)
+  aniDownloader.updateAll()
   res.redirect(`/anime/${id}`)
 })
 

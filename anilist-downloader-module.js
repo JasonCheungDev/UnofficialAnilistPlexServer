@@ -1,13 +1,12 @@
 // node::require() is a method to load modules 
-const { graphql, buildSchema } = require('graphql');
+const { graphql, buildSchema } = require('graphql')
 const fetch = require('node-fetch')
 const util = require('util') // https://stackoverflow.com/questions/10729276/how-can-i-get-the-full-object-in-node-jss-console-log-rather-than-object
-const querystring = require('querystring')
 const sanitize = require('sanitize-filename')
 const fs = require('fs')
-const Parser = require('rss-parser');
+const Parser = require('rss-parser')
 const { si, pantsu } = require('nyaapi')
-//external
+const res = require('express/lib/response')
 const settings = require('./anilist-downloader-settings.js')
 
 // UTIL
@@ -160,20 +159,15 @@ class Worker {
 
     addJob(jobCallback) {
         this.jobs.push(jobCallback)
+        if (this.jobs.length == 1 && !this.isWorking()) {
+            console.log(`Worker ${this.name} : Started!`)
+            const worker = this
+            this.timer = setTimeout(() => { worker._executeNextJob()}, 0)
+        }
     }
 
     isWorking() {
         return this.timer != null
-    }
-
-    // TODO: Can probably remove this and start as soon as a job is added.
-    start() {
-        if (this.timer != null) {
-            loge(`Attempted to start a worker name: ${this.name} when it already started.`)
-            return
-        }
-        const worker = this
-        this.timer = setTimeout(() => { worker._executeNextJob()}, 0)
     }
 
     // TODO: Preferably this would wait for the job to actually finish (if async)
@@ -496,7 +490,7 @@ var trackers = {
             results = results.map(result => { 
                 const rssStandard = {
                     title: result.name,
-                    link: result.links.file,
+                    link: result.torrent,
                     seeders: result.seeders
                 }
                 return rssStandard
@@ -515,26 +509,29 @@ var qbt = {
         // dump(response)
     },
     authenticate: async function() {
-        var apiUri = "/api/v2/auth/login?"
+        const apiUri = "/api/v2/auth/login?"
 
-        var queryString = querystring.stringify({
+        const queryString = new URLSearchParams({
             username: settings.QBT.USERNAME,
             password: settings.QBT.PASSWORD
         })
 
-        const response  = await fetch(this.getUrl() + apiUri + queryString, {
-            credentials: "same-origin"
+        const response  = await fetch(this.getUrl() + apiUri + queryString.toString(), {
+            method: 'GET'
         })
 
-        // example: SID=UvanerY1qZdKhnH64EZJbSbkNnqX14Yz; HttpOnly; path=/; SameSite=Strict
-        var cookie = response.headers.raw()['set-cookie'][0]
-
-        // example: SID=UvanerY1qZdKhnH64EZJbSbkNnqX14Yz
-        var parsedCookie = cookie.substr(0, cookie.indexOf(';'))
-        
-        logi("successful login: " + parsedCookie)
-
-        return parsedCookie
+        if (response.status == 200) {
+            // if successful, authentication information will be stored (not directly accessible in JS anymore)
+            logi("successful login")
+            // example: SID=UvanerY1qZdKhnH64EZJbSbkNnqX14Yz; HttpOnly; path=/; SameSite=Strict
+            const cookie = response.headers.get('set-cookie')
+            // example: SID=UvanerY1qZdKhnH64EZJbSbkNnqX14Yz
+            const SID = cookie.substr(0, cookie.indexOf(';'))
+            return SID
+        } else {
+            loge("FAILED login")
+            return null
+        }
     },
     getSavePath: function(animeInfo) {
         const directory = settings.QBT.DOWNLOAD_LOCATION + (animeInfo.format == CONSTANTS.FORMAT.MOVIE ? "Anime Movie/" : "Anime/")
@@ -563,12 +560,16 @@ var qbt = {
 
         const safePath = sanitize(title)
 
-        const queryString = querystring.stringify({
+        const queryString = new URLSearchParams({
             url: feed,
             path: safePath
         })
 
         const SID = await this.authenticate()
+        if (!SID) {
+            loge("FAILED TO ADD RSS FEED TO QBT - Could not login")
+            return
+        }
 
         const options = {
             method: 'GET', // WARNING: MUST BE GET (despite the docs)
@@ -589,11 +590,15 @@ var qbt = {
 
         const safePath = sanitize(title)
 
-        const queryString = querystring.stringify({
+        const queryString = new URLSearchParams({
             path: safePath
         })
 
         const SID = await this.authenticate()
+        if (!SID) {
+            logi(`Failed to remove RSS feed title ${title} - could not login to qbt.`)
+            return
+        }
 
         const options = {
             method: 'GET', // WARNING: MUST BE GET (despite the docs)
@@ -647,12 +652,16 @@ var qbt = {
             "savePath": this.getSavePath(animeInfo)
         }
 
-        const queryString = querystring.stringify({
+        const queryString = new URLSearchParams({
             ruleName: title,
             ruleDef: JSON.stringify(downloadRule)
         })
 
         const SID = await this.authenticate()
+        if (!SID) {
+            loge("FAILED TO ADD RSS RULE TO QBT - Could not login")
+            return
+        }
 
         const options = {
             method: 'GET', // WARNING: MUST BE GET (despite the docs)
@@ -689,7 +698,7 @@ var qbt = {
             
             //var apiUri = 'api/v2/rss/addFeed?'
 
-            var queryString = querystring.stringify({
+            var queryString = new URLSearchParams({
                 url: "TestURL", //feed
                 path: "Test3Folder"
             })
@@ -738,13 +747,17 @@ var qbt = {
 
         const apiUri = '/api/v2/torrents/add?'
 
-        const queryString = querystring.stringify({
+        const queryString = new URLSearchParams({
             urls: torrentUrl,
             savepath: this.getSavePath(animeInfo),
             category: "Anime"
         })
 
         const SID = await this.authenticate()
+        if (!SID) {
+            loge("FAILED TO ADD TORRENT TO QBT - Could not login")
+            return
+        }
 
         const options = {
             method: 'GET', // WARNING: MUST BE GET (despite the docs)
@@ -956,6 +969,17 @@ var anilist = {
             animeInfo.isSetup = true
             logi(`${title} is blacklisted - will not download`)
         }
+
+        // pass it off to nyaa if need be
+        logi(`Job: Scanning if media: ${animeInfo.title} requires auto-downloading`)
+        if (!animeInfo.isSetup && AnimeInfo.isAllDataLoaded(animeInfo)) {
+            logi(`Requesting auto-downloading job for ${animeInfo.title}`)
+
+            workers.nyaa.addJob(() => {
+                logi(`Job: Setting up auto-downloading for ${animeInfo.title}`)
+                anilist.trySetupAutoDownloading(animeInfo) 
+            })
+        }
     },
 
     trySetupAutoDownloading: async function(animeInfo) {
@@ -1091,8 +1115,6 @@ function updateAll() {
         
     })
 
-    workers.ani.start()
-
     // Phase 2. Retrieving anime data
     workers.ani.addJob(() => {
         logi(`Job: Scanning for media missing info`)
@@ -1119,9 +1141,9 @@ function updateAll() {
             }
         }
 
-        // Phase 3. Setting up auto-downloads (TODO: We can optimize this by having above schedule the nyaa jobs right away)
+        // Phase 3. Setting up auto-downloads (may be redundant now that above schedules auto-download requests already)
         workers.ani.addJob(() => {
-            logi(`Job: Scanning for media that requires auto-downloading`)
+            logi(`Job: Double checking all media for auto-downloading`)
 
             for (const animeInfo of globals.aniDownloader.animes) {
                 if (!animeInfo.isSetup && AnimeInfo.isAllDataLoaded(animeInfo)) {
@@ -1133,8 +1155,6 @@ function updateAll() {
                     })
                 }
             }
-
-            workers.nyaa.start()
         })
     })
 
