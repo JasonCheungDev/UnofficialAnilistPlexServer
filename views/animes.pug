@@ -23,30 +23,30 @@ block content
             if (item.manual)
               tr(class="primary-text")
                 td 
-                  a(href="/anime/#{item.mediaId}") #{item.title}
+                  a(href='/anime/' + item.mediaId) #{item.title}
                 td(class="note-col")
                   span [MANURAL RULE]
             else if (item.isBlacklisted)
               tr(class="error-text")
                 td 
-                  a(href="/anime/#{item.mediaId}") #{item.title}
+                  a(href="/anime/" + item.mediaId) #{item.title}
                 td(class="note-col")
                   span [BLACKLISTED]
             else if (item.noResults)
               tr(class="error-text")
                 td 
-                  a(href="/anime/#{item.mediaId}") #{item.title}
+                  a(href="/anime/" + item.mediaId) #{item.title}
                 td(class="note-col")
                   span [NO RESULTS]
             else if (item.downloadTime)
               tr(class="warning-text")
                 td
-                  a(href="/anime/#{item.mediaId}") #{item.title}
+                  a(href="/anime/" + item.mediaId) #{item.title}
                 td(class="note-col")
                   span [Downloads on #{new Date(item.downloadTime).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}]
             else
               tr(class="primary-text")
                 td
-                  a(href="/anime/#{item.mediaId}" class="primary-text") #{item.title}
+                  a(href="/anime/" + item.mediaId, class="primary-text") #{item.title}
                 td(class="note-col")
                   span

@@ -34,10 +34,11 @@ block content
       img(src="images/plex_logo.svg" height="64px")
       .padding-small
         p Watch on #[a(href="https://www.plex.tv/en-ca/" class="plex-link") Plex] by entering your email to receive an invite link
+        i Currently disabled, please contact the owner of the server directly.
       form(method='POST' action='/add_plex_email')
-        input#email.text-input(type='email', placeholder='email' name='email')
+        input#email.text-input(type='email', placeholder='email' name='email' disabled)
         input(type='hidden' value='/' name='redirect')
-        button.plex-button(type='submit') Invite Me
+        button.plex-button(type='submit' disabled) Invite Me
       if email
         p #{email} invited successfully - please wait 1 minute!
 
