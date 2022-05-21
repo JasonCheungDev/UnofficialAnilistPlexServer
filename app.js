@@ -62,7 +62,7 @@ app.get('/anime/:mediaId', async function(request, resource) {
   var animes = aniDownloader.getData().animes
   const found = animes.find( element => { return element.mediaId == request.params.mediaId });
   if (found) {
-    if (!found.manual && found.noResults || found.isStalled) {
+    if (found.noResults || found.isStalled) {
       // troubles downloading anime, ask user for resolution
       const resolution = await aniDownloader.getResolutionEntries(found)
       resource.render('anime', {
