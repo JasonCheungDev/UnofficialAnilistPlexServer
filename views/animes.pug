@@ -31,13 +31,19 @@ block content
                 td 
                   a(href="/anime/" + item.mediaId) #{item.title}
                 td(class="note-col")
-                  span [BLACKLISTED]
+                  span [DENY LISTED]
             else if (item.noResults)
               tr(class="error-text")
                 td 
                   a(href="/anime/" + item.mediaId) #{item.title}
                 td(class="note-col")
                   span [NO RESULTS]
+            else if (item.isStalled)
+              tr(class="error-text")
+                td
+                  a(href="/anime/" + item.mediaId) #{item.title}
+                td(class="note-col")
+                  span [STALLED]
             else if (item.downloadTime)
               tr(class="warning-text")
                 td

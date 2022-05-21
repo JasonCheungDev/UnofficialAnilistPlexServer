@@ -122,6 +122,11 @@ a:hover {
   color: rgb(61, 180, 242);
 }
 
+a[target="_blank"]::after {
+  content: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAQElEQVR42qXKwQkAIAxDUUdxtO6/RBQkQZvSi8I/pL4BoGw/XPkh4XigPmsUgh0626AjRsgxHTkUThsG2T/sIlzdTsp52kSS1wAAAABJRU5ErkJggg==);
+  margin: 0 3px 0 5px;
+}
+
 /* LOGO */
 a.logo {
   font-family: 'Heebo', sans-serif;
@@ -134,8 +139,12 @@ a.logo * {
 
 .text-input {
   border-radius: 16px;
-  border: none;
+  border-style: none;
   padding: 8px;
+}
+
+.text-input.bordered {
+  border-style: solid;
 }
 
 /* LANDING */
@@ -239,4 +248,14 @@ color:rgb(237, 241, 245);
 
 #animes-table .note-col {
   vertical-align: top;
+  white-space: nowrap;
+}
+
+/* Page: Anime */
+table {
+  vertical-align: top;
+}
+
+.resolution-entry-disabled {
+  opacity: 0.5;
 }
