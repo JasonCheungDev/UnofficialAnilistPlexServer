@@ -1,8 +1,16 @@
 extends layout_with_header
 
+block additionalHeaderContent
+  script(src="/javascripts/anime.js")
+
 block content
-  .body-container
+  .body-container 
     h3.primary-text #{anime.title}
+    .body-container-contents
+      a(href="https://anilist.co/anime/" + anime.mediaId target="_blank" class="anilist-link") AniList Link
+
+  .body-container
+    h3.primary-text Status
     .body-container-contents
       .highlight-text
         if (anime.noResults)
@@ -10,14 +18,87 @@ block content
         else 
           p No errors detected
 
+  if (resolution)
+    .body-container
+      h3.primary-text Resolution Required
+      .body-container-contents
+        .primary-text
+          b The server is encountering troubles auto-downloading this anime. Listed below are results from a very lenient search for this anime; you can: 
+            li Click [Download] on a sinle entry for the server to download.
+            li Enter a filter in the text box below and click [Download Filtered] for the server to download all highlighted items.
+
+    .body-container.resolution-container
+      .body-container-contents.primary-text
+        div
+          table(id="resolution-filter-table")
+
+        div 
+          table(id="resolution-table")
+            tr 
+              th Filter (case sensitive)
+              th Selected
+              th 
+            tr
+              form(method='POST' action='/set_anime_manual_rule')
+                input(type='hidden' value=anime.mediaId name='mediaId')
+                input(type='hidden' value=resolution.searchTerm name='searchTerm')
+                td
+                  input(type="text", name="rule" id="resolution-filter-input" class="text-input bordered" style="width: 90%")
+                td(id="resolution-filter-count") 0
+                td
+                  button(type="submit") Download Filtered
+            tr(style="vertical-align: center")
+              td 
+                hr
+              td 
+                hr
+              td 
+                hr
+            tr
+              th Entry 
+              th Seeders 
+              th
+            each item in resolution.results
+              tr
+                td #{item.title}
+                td #{item.seeders}
+                td
+                  form(method='POST' action='/add_anime_manual_download')
+                    input(type='hidden' value=anime.mediaId name='mediaId')
+                    input(type='hidden' value=item.link name='link')
+                    //- input(type='hidden' value=resolution.searchTerm name='searchTerm')
+                    //- input(type='hidden' value=item.title name='rule')
+                    button(type='submit') Download
+
+          hr
+          
+          i Search Term Used: #{resolution.searchTerm}
+
   .body-container
     h3.primary-text Manual
     .body-container-contents
       .primary-text
+        b NOT RECOMMENDED to use. If the download is failing use the Resolution tool above (if present) or Reset tool below. 
         p A manual rule will override automatic torrent selection.
         p To set a manual rule make a search on #[a(href="https://nyaa.si/?f=0&c=1_2&q=" target="_blank" class="anilist-link") Nyaa] and paste it in the box below.
         p #[b ALL torrents will be downloaded] in the search so please make it as exact as possible!
-    form(method='POST' action='/set_anime_manual_rule')
-      input.text-input(type='text', placeholder='' value=anime.manual name='rule')
-      input(type='hidden' value=anime.mediaId name='mediaId')
-      button(type='submit') Set Manual Rule
+      form(method='POST' action='/set_anime_manual_rule')
+        input.text-input.bordered(type='text', placeholder='' value=anime.manual name='rule')
+        input(type='hidden' value=anime.mediaId name='mediaId')
+        button(type='submit') Set Manual Rule
+
+  .body-container
+    h3.primary-text Reset
+    .body-container-contents 
+      .primary-text
+        p Resets this anime back to the default state, attempting to auto-download it again.
+        form(method='POST' action='/reset_anime')
+          input(type='hidden' value=anime.mediaId name='mediaId')
+          button(type='submit') Reset 
+        br
+        p Force this anime to use the Resolution tool, allowing you to control specifically what the server downloads.
+        form(method='POST' action='/resolve_anime')
+          input(type='hidden' value=anime.mediaId name='mediaId')
+          button(type='submit') Resolve Anime
+
+

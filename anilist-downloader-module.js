@@ -26,6 +26,16 @@ function dump(object) {
     console.log(util.inspect(object, false, null, true))
 }
 
+function nthIndex(str, pat, n) {
+    const L = str.length
+    let i = -1;
+    while (n-- && i++ < L) {
+        i = str.indexOf(pat, i);
+        if (i < 0) break;
+    }
+    return i;
+}
+
 function now() {
     let date_ob = new Date()
 
@@ -44,12 +54,12 @@ function now() {
 
     var old = `${month}-${date} ${hours}:${minutes}`
 
-    return date_ob.toLocaleString('en-US', { 
-        day: 'numeric', 
-        month: 'short', 
-        hour: 'numeric', 
-        minute: 'numeric', 
-        hour12: true 
+    return date_ob.toLocaleString('en-US', {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
     })
 }
 
@@ -75,7 +85,7 @@ const CONSTANTS = {
         REPEATING: 5
     },
     QUALITY_PREFERENCE: [
-        "BD", 
+        "BD",
         "1080",
         "720"
     ],
@@ -114,6 +124,8 @@ class AnimeInfo {
         this.isBlacklisted = false// blacklisted (will not download)
         this.manual = ""        // manual title to search for
         this.downloadTime = null// if set indicates when this anime will be downloaded
+        this.observe = ""       // if set indicates the torrent name filter used to check for stalled downloads in the torrent client
+        this.isStalled = false  // torrenting may be stalled (no seeders)
     }
 
     // note: static functions as data is reloaded as a plain object (without this prototype)
@@ -138,8 +150,9 @@ class UserInfo {
 }
 
 class FeedEntry {
-    constructor(link, group, title, episode, quality, isBatch, seeders) {
+    constructor(link, group, originalTitle, title, episode, quality, isBatch, seeders) {
         this.link = link
+        this.originalTitle = originalTitle
         this.group = group
         this.title = title
         this.episode = parseInt(episode)
@@ -151,7 +164,7 @@ class FeedEntry {
 
 class Worker {
     constructor(name, interval) {
-        this.name = name 
+        this.name = name
         this.interval = interval
         this.jobs = []
         this.timer = null
@@ -162,7 +175,7 @@ class Worker {
         if (this.jobs.length == 1 && !this.isWorking()) {
             console.log(`Worker ${this.name} : Started!`)
             const worker = this
-            this.timer = setTimeout(() => { worker._executeNextJob()}, 0)
+            this.timer = setTimeout(() => { worker._executeNextJob() }, 0)
         }
     }
 
@@ -204,7 +217,7 @@ const workers = {
 
 // APPLICATION
 var shared = {
-    markAnimeSetup: function(title) {
+    markAnimeSetup: function (title) {
         var element = globals.aniDownloader.animes.find(animeInfo => {
             return animeInfo.title == title;
         })
@@ -213,6 +226,7 @@ var shared = {
             logi(`[UPDATE] ${title} is setup`)
             element.isSetup = true
             element.noResults = false
+            element.isStalled = false
         } else {
             logw(`Could not mark cached anime as setup - could not find the anime ${title}`)
         }
@@ -226,7 +240,7 @@ var trackers = {
          * Retrieves the strict anime title (for rules) from a tracker listing. This is the actual title found in a RSS query.
          * @param {String} title The tracker listing title (eg. "[TranslatorGroup] title - 12")
          */
-        parseStrictTitleFromFeedEntry: function(entry) {
+        parseStrictTitleFromFeedEntry: function (entry) {
             /* explanation: 
                 "]\s+"          : find the end of the translator group "[Horrible Subs] "
                 .+?             : match everything until...
@@ -248,7 +262,7 @@ var trackers = {
          * @param {FeedEntry} feedResults The list of RSS feed entries
          * @example Original: "Another" finds ["Another", "ImoCho - Another Shitty Sister Manga Adaptation"] returning "Another" for best match
          */
-        generateStrictTitleFromFeedResults: function(originalTitle, feedResults) {
+        generateStrictTitleFromFeedResults: function (originalTitle, feedResults) {
             logi(`Generating strict title for ${originalTitle}`)
 
             // find all unique titles
@@ -267,7 +281,7 @@ var trackers = {
                 logi("Found unique titles:")
                 dump(titles)
             }
-            
+
             // find best match 
             function simpleEvaluator(original, toCheck) {
                 return Math.abs(original.length - toCheck.length)
@@ -292,14 +306,14 @@ var trackers = {
          * Retrieves the group, title, episode, and quality of an RSS entry
          * @param {String} entry 
          */
-        parseInfoFromFeedEntry: function(link, entry, seeders) {
+        parseInfoFromFeedEntry: function (link, entry, seeders) {
             logi(`Parsing info from feed entry - ${entry}`)
 
             // Standard Match
             const regexPattern = /\[(.+?)\]\s+(.+?)\s+-\s+(?:S\d\dE)?(\d\d)\s+[\[\(](.+?)[\]\)]/i
             const match = entry.match(regexPattern)
             if (match) {
-                return new FeedEntry(link, match[1], match[2], match[3], this.parseQualityFromString(match[4]), false, seeders)
+                return new FeedEntry(link, match[1], entry, match[2], match[3], this.parseQualityFromString(match[4]), false, seeders)
             }
 
             // Extrapolate Match (batch assumed)
@@ -308,12 +322,12 @@ var trackers = {
             const group = groupMatch ? groupMatch[1] : ""
             const title = this.cleanTitleFromEntry(entry)
             const quality = this.parseQualityFromString(entry)
-            return new FeedEntry(link, group, title, -1, quality, true, seeders)
+            return new FeedEntry(link, group, entry, title, -1, quality, true, seeders)
         },
 
-        parseQualityFromString: function(string) {
+        parseQualityFromString: function (string) {
             var quality = 0
-            
+
             if (string.includes("BD") || string.includes("BluRay")) {
                 quality += 10000 // Bluray modifier is always preferred
             }
@@ -324,12 +338,12 @@ var trackers = {
                 quality += 720
             } else if (string.includes("480")) {
                 quality += 480
-            } 
+            }
 
             return quality
         },
 
-        cleanTitleFromEntry: function(string) {
+        cleanTitleFromEntry: function (string) {
             return string.replace(/_/g, " ")
                 .replace(/\(.+?\)/g, "")
                 .replace(/\[.+?\]/g, "")
@@ -353,7 +367,7 @@ var trackers = {
          * @param {FeedEntry} feedResults The list of RSS feed entries
          * @example Original: "Another" finds ["Another", "ImoCho - Another Shitty Sister Manga Adaptation"] returning "Another" for best match
          */
-        getBestFeedEntry: function(originalTitle, feedResults) {
+        getBestFeedEntry: function (originalTitle, feedResults) {
             logi(`Finding best entry for ${originalTitle}`)
             dump(feedResults)
 
@@ -375,7 +389,7 @@ var trackers = {
                 logw("No results detected from RSS query.")
                 return null
             }
-            
+
             // title evaluator
             function titleEvaluator(originalTitle, entryToCheck) {
                 const lowerCaseTitle = originalTitle.toLowerCase()
@@ -386,7 +400,7 @@ var trackers = {
                     // lengths are exact, check each character (useful for seasons)
                     for (let i = 0; i < lowerCaseTitle; i++) {
                         if (originalTitle.charAt(i) != entryTitle.charAt(i)) {
-                            error += 1 / lowerCaseTitle                            
+                            error += 1 / lowerCaseTitle
                         }
                     }
                 }
@@ -407,7 +421,7 @@ var trackers = {
                         if (group == "ANY") {
                             trackers.common.defaultGroupEvaluation = 1
                         }
-                    }       
+                    }
                 }
                 return trackers.common.defaultGroupEvaluation
             }
@@ -425,7 +439,7 @@ var trackers = {
                 const r = titleEvaluator(originalTitle, rhs)
                 if (l != r) {
                     return l - r
-                } 
+                }
 
                 // best quality
                 if (lhs.quality != rhs.quality) {
@@ -455,17 +469,17 @@ var trackers = {
         }
     },
     nyaa: {
-        generateRssFeedUrl: function(title, quality, group, makeStrict) {
+        generateRssFeedUrl: function (title, quality, group, makeStrict) {
             // c=1_2 == Anime - English Translated
             if (makeStrict) {
                 title = `"${title}"`
             }
-            var uriFriendlyString = "https://nyaa.si/?page=rss&q=" + encodeURI(group + " " + title + " " + quality) + "&c=1_2&f=0"
+            var uriFriendlyString = "https://nyaa.si/?page=rss&q=" + encodeURIComponent(group + " " + title + " " + quality) + "&c=1_2&f=0"
             logi(`nya.generateRssFeedUrl: ${uriFriendlyString}`)
             return uriFriendlyString
         },
 
-        getRssFeedResults: async function(feedUrl) {
+        getRssFeedResults: async function (feedUrl) {
             logw("====FEED URL")
             dump(feedUrl)
             let parser = new Parser({
@@ -479,7 +493,7 @@ var trackers = {
             return results.items
         },
 
-        getSearchResults: async function(search) {
+        getSearchResults: async function (search) {
             const maximumResults = 75
             let results = await si.search(search, maximumResults, {
                 category: '1_2',
@@ -487,7 +501,7 @@ var trackers = {
                 p: 1
             })
             // reformat to rss standard (this allows us reuse getBestFeedEntry)
-            results = results.map(result => { 
+            results = results.map(result => {
                 const rssStandard = {
                     title: result.name,
                     link: result.torrent,
@@ -502,13 +516,13 @@ var trackers = {
 
 // TORRENT CLIENT API
 var qbt = {
-    getUrl: function() {
+    getUrl: function () {
         return 'http://localhost:' + settings.QBT.PORT
     },
-    handleResponse: function(response) {
+    handleResponse: function (response) {
         // dump(response)
     },
-    authenticate: async function() {
+    authenticate: async function () {
         const apiUri = "/api/v2/auth/login?"
 
         const queryString = new URLSearchParams({
@@ -516,7 +530,7 @@ var qbt = {
             password: settings.QBT.PASSWORD
         })
 
-        const response  = await fetch(this.getUrl() + apiUri + queryString.toString(), {
+        const response = await fetch(this.getUrl() + apiUri + queryString.toString(), {
             method: 'GET'
         })
 
@@ -533,12 +547,36 @@ var qbt = {
             return null
         }
     },
-    getSavePath: function(animeInfo) {
+    /**
+     * 
+     * @param {string} errorMessage : Custom error message. Optional.
+     * @param {string} method : REST method. 'GET' by default.
+     */
+    authenticateAndGenerateFetchOptions: async function (errorMessage, method) {
+        if (!errorMessage) errorMessage = ""
+        if (!method) method = "GET"
+
+        const SID = await this.authenticate()
+        if (!SID) {
+            loge(`FAILED to login to qbt. ` + errorMessage)
+            return null
+        }
+
+        const options = {
+            method: method, // WARNING: MOST REQUESTS MUST BE GET (despite the docs)
+            headers: {
+                'Cookie': SID
+            }
+        }
+
+        return options
+    },
+    getSavePath: function (animeInfo) {
         const directory = settings.QBT.DOWNLOAD_LOCATION + (animeInfo.format == CONSTANTS.FORMAT.MOVIE ? "Anime Movie/" : "Anime/")
         const safePath = sanitize(animeInfo.title)
         return directory + safePath
     },
-    addFeed: async function(feed, title) {
+    addFeed: async function (feed, title) {
         logi(`[QBT] Adding feed ${feed}`)
 
         // check if necessary
@@ -558,6 +596,8 @@ var qbt = {
         // setup request
         const apiUri = '/api/v2/rss/addFeed?'
 
+        const options = await this.authenticateAndGenerateFetchOptions(`addFeed for ${title}`)
+
         const safePath = sanitize(title)
 
         const queryString = new URLSearchParams({
@@ -565,47 +605,23 @@ var qbt = {
             path: safePath
         })
 
-        const SID = await this.authenticate()
-        if (!SID) {
-            loge("FAILED TO ADD RSS FEED TO QBT - Could not login")
-            return
-        }
-
-        const options = {
-            method: 'GET', // WARNING: MUST BE GET (despite the docs)
-            headers: {
-                'Cookie': SID
-            }
-        }
-
         const response = await fetch(this.getUrl() + apiUri + queryString, options)
 
         if (!response.ok) {
             loge("FAILED TO ADD RSS FEED TO QBT:\n" + util.inspect(response, false, null, true))
         }
     },
-    removeFeed: async function(title) {
+    removeFeed: async function (title) {
         // setup request
         const apiUri = '/api/v2/rss/removeItem?'
+
+        const options = await this.authenticateAndGenerateFetchOptions(`removeFeed for ${title}`)
 
         const safePath = sanitize(title)
 
         const queryString = new URLSearchParams({
             path: safePath
         })
-
-        const SID = await this.authenticate()
-        if (!SID) {
-            logi(`Failed to remove RSS feed title ${title} - could not login to qbt.`)
-            return
-        }
-
-        const options = {
-            method: 'GET', // WARNING: MUST BE GET (despite the docs)
-            headers: {
-                'Cookie': SID
-            }
-        }
 
         const response = await fetch(this.getUrl() + apiUri + queryString, options)
 
@@ -620,11 +636,13 @@ var qbt = {
      * @param {*} title The title of the anime.
      * @param {*} animeInfo The AnimeInfo object for tracking.
      * @param {*} strictMatchRule A filter string that a feed entry title must have. If not defined everything in the feed will be downloaded.
-     */ 
-    addRule: async function(feed, title, animeInfo, strictMatchRule) {
+     */
+    addRule: async function (feed, title, animeInfo, strictMatchRule) {
         logi(`[QBT] Adding rule ${title}`)
 
         const apiUri = '/api/v2/rss/setRule?'
+
+        const options = await this.authenticateAndGenerateFetchOptions(`addRule for ${title}`)
 
         const additionalIgnoreRules = []
         if (strictMatchRule) {
@@ -657,19 +675,6 @@ var qbt = {
             ruleDef: JSON.stringify(downloadRule)
         })
 
-        const SID = await this.authenticate()
-        if (!SID) {
-            loge("FAILED TO ADD RSS RULE TO QBT - Could not login")
-            return
-        }
-
-        const options = {
-            method: 'GET', // WARNING: MUST BE GET (despite the docs)
-            headers: {
-                'Cookie': SID
-            }
-        }
-
         const response = await fetch(this.getUrl() + apiUri + queryString, options)
 
         if (response.status == 409) {
@@ -678,12 +683,12 @@ var qbt = {
         } else if (!response.ok) {
             loge("FAILED TO ADD RSS RULE TO QBT:\n" + dump(response))
             return;
-        } 
+        }
 
         // track
         shared.markAnimeSetup(title)
     },
-    queryTorrents: function() {
+    queryTorrents: function () {
         /*
         // var SID = await this.authenticate()
 
@@ -742,29 +747,18 @@ var qbt = {
         dump(response)
         */
     },
-    addTorrent: async function(title, animeInfo, torrentUrl) {
+    addTorrent: async function (title, animeInfo, torrentUrl) {
         logi(`[QBT] Adding torrent: ${torrentUrl} for title: ${title}`)
 
         const apiUri = '/api/v2/torrents/add?'
+
+        const options = await this.authenticateAndGenerateFetchOptions(`addTorrent for ${title}`)
 
         const queryString = new URLSearchParams({
             urls: torrentUrl,
             savepath: this.getSavePath(animeInfo),
             category: "Anime"
         })
-
-        const SID = await this.authenticate()
-        if (!SID) {
-            loge("FAILED TO ADD TORRENT TO QBT - Could not login")
-            return
-        }
-
-        const options = {
-            method: 'GET', // WARNING: MUST BE GET (despite the docs)
-            headers: {
-                'Cookie': SID
-            }
-        }
 
         const response = await fetch(this.getUrl() + apiUri + queryString, options)
 
@@ -774,22 +768,60 @@ var qbt = {
         } else if (!response.ok) {
             loge("FAILED TO ADD TORRENT TO QBT:\n" + dump(response))
             return
-        } 
+        }
 
         // track
         shared.markAnimeSetup(title)
+    },
+    checkForStalledTorrents: async function () {
+        logi(`[QBT] Querying all stalled torrents`)
+
+        const apiUri = '/api/v2/torrents/info?'
+
+        const options = await this.authenticateAndGenerateFetchOptions(`checkForStalledTorrents`)
+
+        const queryString = new URLSearchParams({
+            filter: 'stalled_downloading'
+        })
+
+        const response = await fetch(this.getUrl() + apiUri + queryString, options)
+
+        if (!response.ok) {
+            loge("FAILED to checkForStalledTorrents.\n" + dump(response))
+            return
+        }
+
+        const torrents = await response.json()
+
+        if (torrents.length == 0) {
+            logi(`[QBT] No torrents stalled!`) // verbose
+            return
+        }
+
+        for (const animeInfo of globals.aniDownloader.animes) {
+            if (!animeInfo.observe || animeInfo.isStalled) {
+                continue
+            }
+
+            for (const torrentEntry of torrents) {
+                if (torrentEntry.name.includes(animeInfo.observe)) {
+                    logw(`[QBT] Possible stalled anime for title: ${animeInfo.title}`)
+                    animeInfo.isStalled = true
+                    break
+                }
+            }
+        }
     }
 }
 
 // ANILIST API
-
 var anilist = {
     // QUERIES 
 
     // Here we define our query as a multi-line string
     // Storing it in a separate .graphql/.gql file is also possible
-    queryAnime: 
-`query ($id: Int) { # Define which variables will be used in the query (id)
+    queryAnime: `
+query ($id: Int) { # Define which variables will be used in the query (id)
     Media (id: $id, type: ANIME) { # Insert our variables into the query arguments (id) (type: ANIME is hard-coded in the query)
         id
         format
@@ -807,8 +839,8 @@ var anilist = {
     }
 }`,
 
-    queryUser:
-`query ($name: String) {
+    queryUser: `
+query ($name: String) {
     User (name: $name) {
         id
         name
@@ -846,8 +878,8 @@ var anilist = {
     }
 }`,
 
-    queryMediaListCollection: 
-`query ($name: String) {
+    queryMediaListCollection: `
+query ($name: String) {
     MediaListCollection(userName: $name, type: ANIME) {
         lists {
             name
@@ -859,8 +891,8 @@ var anilist = {
     }
 }`,
 
-    queryMediaList: 
-`query {
+    queryMediaList: `
+query {
     MediaList(id: 89369849) {
         id
         userId
@@ -869,7 +901,7 @@ var anilist = {
 }`,
 
     // Define our query variables and values that will be used in the query request
-    generateQueryVariables: function(username) {
+    generateQueryVariables: function (username) {
         return {
             name: username
         }
@@ -877,7 +909,7 @@ var anilist = {
 
     // COMMON
 
-    generateRequest: function(query, variables) {
+    generateRequest: function (query, variables) {
         // Define the config we'll need for our Api request
         var ret = {
             url: 'https://graphql.anilist.co',
@@ -896,7 +928,7 @@ var anilist = {
         return ret;
     },
 
-    handleJsonResponse: function(response) {
+    handleJsonResponse: function (response) {
         return response.json().then(function (json) {
             return response.ok ? json : Promise.reject(json);
         });
@@ -904,12 +936,12 @@ var anilist = {
 
     // QUERY SPECIFIC
 
-    handleUserListdata: async function(data) {
+    handleUserListdata: async function (data) {
         logi("handleUserListdata");
 
         var i = 0
         for (const MediaListGroup of data.data.MediaListCollection.lists) {
-           
+
             // list name check
             if (!settings.ANI.LISTS.includes(MediaListGroup.name)) {
                 continue
@@ -933,12 +965,12 @@ var anilist = {
         }
     },
 
-    handleError: function(error) {
+    handleError: function (error) {
         loge("Error detected")
         dump(error)
     },
 
-    handleMediaData: async function(data) {
+    handleMediaData: async function (data) {
         logi(`Retrieved media info for ${data.data.Media.id}. Title:`)
         dump(data.data.Media.title)
 
@@ -977,12 +1009,12 @@ var anilist = {
 
             workers.nyaa.addJob(() => {
                 logi(`Job: Setting up auto-downloading for ${animeInfo.title}`)
-                anilist.trySetupAutoDownloading(animeInfo) 
+                anilist.trySetupAutoDownloading(animeInfo)
             })
         }
     },
 
-    trySetupAutoDownloading: async function(animeInfo) {
+    trySetupAutoDownloading: async function (animeInfo) {
         const title = animeInfo.title
         logi(`trySetupAutoDownloading for ${title}`)
 
@@ -1006,10 +1038,11 @@ var anilist = {
 
         // update rules 
         if (animeInfo.manual) {
-            // manual mode set
+            // manual mode set (while strict is set to false, the manual rule might include strict rules itself)
             let feed = trackers.nyaa.generateRssFeedUrl(animeInfo.manual, "", "", false)
             await qbt.addFeed(feed, title)
             await qbt.addRule(feed, title, animeInfo)
+            animeInfo.observe = animeInfo.manual
         } else if (CONSTANTS.MISC.strict) {
             // update feed 
             const relaxedTitle = title.replace(/[^a-zA-Z\d\s]/g, " ")
@@ -1019,10 +1052,12 @@ var anilist = {
             if (bestEntry) {
                 if (bestEntry.isBatch) {
                     await qbt.addTorrent(title, animeInfo, bestEntry.link)
+                    animeInfo.observe = bestEntry.title
                 } else {
                     let bestFeed = trackers.nyaa.generateRssFeedUrl(bestEntry.title, bestEntry.quality, bestEntry.group, true)
                     await qbt.addFeed(bestFeed, title)
                     await qbt.addRule(bestFeed, title, animeInfo, `\] ${bestEntry.title} -`)
+                    animeInfo.observe = bestEntry.title
                 }
 
                 if (bestEntry.seeders == 0) {
@@ -1038,6 +1073,7 @@ var anilist = {
             let feed = trackers.nyaa.generateRssFeedUrl(title, "1080", CONSTANTS.GROUPS.HORRIBLE_SUBS)
             await qbt.addFeed(feed, title)
             await qbt.addRule(feed, title, animeInfo)
+            animeInfo.observe = title
         }
     }
 }
@@ -1045,7 +1081,7 @@ var anilist = {
 // Add a user
 function addUser(name) {
     logi(`Adding user ${name}`)
-    
+
     dump(globals)
 
     var result = globals.aniDownloader.users.find(userInfo => {
@@ -1065,7 +1101,7 @@ function addUser(name) {
 function removeUser(name) {
     logi(`Removing user ${name}`)
 
-    globals.aniDownloader.users = globals.aniDownloader.users.filter( userInfo => {
+    globals.aniDownloader.users = globals.aniDownloader.users.filter(userInfo => {
         return userInfo.username != name
     });
 }
@@ -1073,9 +1109,9 @@ function removeUser(name) {
 function setManualRule(mediaId, rule) {
     logi(`Adding manual rule for ${mediaId} with rule ${rule}`)
 
-    let animeInfo = globals.aniDownloader.animes.find( anime => {
+    let animeInfo = globals.aniDownloader.animes.find(anime => {
         return anime.mediaId == mediaId
-    });
+    })
 
     if (!animeInfo) {
         loge(`Unable to add manual rule, could not find anime!`)
@@ -1085,6 +1121,84 @@ function setManualRule(mediaId, rule) {
     animeInfo.manual = rule
     animeInfo.isSetup = false
     animeInfo.noResults = false
+}
+
+async function addManualDownload(mediaId, link) {
+    logi(`Adding manual download for ${mediaId} with link ${link}`)
+
+    let animeInfo = globals.aniDownloader.animes.find(anime => {
+        return anime.mediaId == mediaId
+    })
+
+    if (!animeInfo) {
+        loge(`Unable to add manual rule, could not find anime!`)
+        return
+    }
+
+    await qbt.addTorrent(animeInfo.title, animeInfo, link)
+    // don't observe, we assume if a manual link is given then it's good
+    animeInfo.observe = ""
+}
+
+function resetAnime(mediaId) {
+    logi(`Resetting anime for ${mediaId} to default state.`)
+
+    let animeInfo = globals.aniDownloader.animes.find(anime => {
+        return anime.mediaId == mediaId
+    })
+
+    if (!animeInfo) {
+        loge(`Unable to reset, could not find anime!`)
+        return
+    }
+
+    animeInfo.isSetup = false
+    animeInfo.noResults = false
+    animeInfo.manual = ""
+    animeInfo.observe = ""
+    animeInfo.isStalled = false
+}
+
+function resolveAnime(mediaId) {
+    logi(`Force resolving anime for ${mediaId}.`)
+
+    let animeInfo = globals.aniDownloader.animes.find(anime => {
+        return anime.mediaId == mediaId
+    })
+
+    if (!animeInfo) {
+        loge(`Unable to resolve, could not find anime!`)
+        return
+    }
+
+    animeInfo.isSetup = true // don't auto-download until user input
+    animeInfo.noResults = true // this enables the resolution tool
+    animeInfo.manual = ""
+    animeInfo.observe = ""
+    animeInfo.isStalled = false
+}
+
+async function getResolutionEntries(animeInfo) {
+    logi(`getResolutionEntries ${animeInfo.title}`)
+    let relaxedTitle = animeInfo.title
+    // remove special characters
+    relaxedTitle = relaxedTitle.replace(/[^a-zA-Z\d\s]/g, " ")
+    // only use up to first 3 words
+    const idx = nthIndex(relaxedTitle, " ", 3)
+    if (idx > 0) {
+        relaxedTitle = relaxedTitle.substr(0, idx)
+    }
+
+    let results = await trackers.nyaa.getSearchResults(relaxedTitle)
+    // don't allow 0 seeders to stall again
+    results = results.filter((result) => {
+        return result.seeders > 0
+    })
+
+    return {
+        searchTerm: relaxedTitle,
+        results: results
+    }
 }
 
 // Checks all AniList users and downloads all anime in the "Watching" list.
@@ -1097,7 +1211,7 @@ function updateAll() {
     }
 
     globals.aniDownloader.users.forEach((userInfo, index, array) => {
-        
+
         // Phase 1. Querying all user lists
         workers.ani.addJob(() => {
             logi(`Job: Retrieving user list for ${userInfo.username}`)
@@ -1112,7 +1226,7 @@ function updateAll() {
                 .then(anilist.handleUserListdata)
                 .catch(anilist.handleError);
         })
-        
+
     })
 
     // Phase 2. Retrieving anime data
@@ -1151,10 +1265,16 @@ function updateAll() {
 
                     workers.nyaa.addJob(() => {
                         logi(`Job: Setting up auto-downloading for ${animeInfo.title}`)
-                        anilist.trySetupAutoDownloading(animeInfo) 
+                        anilist.trySetupAutoDownloading(animeInfo)
                     })
                 }
             }
+
+            // Phase 4. Check for any stalled entries
+            workers.nyaa.addJob(() => {
+                logi(`Job: Checking for stalled entries`)
+                qbt.checkForStalledTorrents()
+            })
         })
     })
 
@@ -1179,7 +1299,7 @@ function saveData() {
     try {
         fs.writeFileSync(CONSTANTS.STORAGE.DIRECTORY + CONSTANTS.STORAGE.FILENAME, JSON.stringify(globals))
         logi("Successfully saved cached data")
-    } catch(error) {
+    } catch (error) {
         loge("Failed to save cached data")
         loge(error)
     }
@@ -1199,7 +1319,7 @@ function loadData() {
             loge("Failed to parse cached data")
             dump(error)
         }
-    } catch(error) {
+    } catch (error) {
         loge("Failed to load cached data")
         saveData() // most likely does not exists, create it now.
     }
@@ -1227,6 +1347,16 @@ function migrateData() {
         if (animeInfo.isBlacklisted === undefined) {
             logi(`Migrating data for ${animeInfo.title} - adding isBlacklisted`)
             animeInfo.isBlacklisted = false
+            dataChanged = true
+        }
+        if (animeInfo.observe === undefined) {
+            logi(`Migrating data for ${animeInfo.title} - adding observe`)
+            animeInfo.observe = ""
+            dataChanged = true
+        }
+        if (animeInfo.isStalled === undefined) {
+            logi(`Migrating data for ${animeInfo.title} - adding isStalled`)
+            animeInfo.isStalled = false
             dataChanged = true
         }
     }
@@ -1261,9 +1391,9 @@ process.on('exit', () => {
     saveData()
 })
 
-process.on('SIGINT', function() {
-  logw('User interrupted')
-  process.exit()
+process.on('SIGINT', function () {
+    logw('User interrupted')
+    process.exit()
 });
 
 
@@ -1271,24 +1401,39 @@ function main() {
     loadData()
     migrateData()
 
+
+}
+
+/* A bunch of test cases for debugger use
+async function main() {
+    // updateAll()
+    // while (isWorkActive()) {
+    //     await new Promise(r => setTimeout(r, 2000));
+    // }
+
     // Test all saved animes
     //await updateAnimesOnly()
 
     // Test single anime
     // const testAnime = new AnimeInfo(106625, "Haikyuu!! TO THE TOP")
     //await anilist.setupAutoDownloading(testAnime)
-    
-    /* Standalone 
+
+    // Standalone 
     addUser("Your Username")
-    */
 }
+*/
+
 main()
 
 module.exports.addUser = addUser
 module.exports.removeUser = removeUser
 module.exports.setManualRule = setManualRule
+module.exports.addManualDownload = addManualDownload
+module.exports.resetAnime = resetAnime
+module.exports.resolveAnime = resolveAnime
 module.exports.updateAll = updateAll
 module.exports.getData = getData
 module.exports.saveData = saveData
 module.exports.loadData = loadData
 module.exports.isWorkActive = isWorkActive
+module.exports.getResolutionEntries = getResolutionEntries

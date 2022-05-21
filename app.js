@@ -1,8 +1,9 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+var createError = require('http-errors')
+var express = require('express')
+var favicon = require('serve-favicon')
+var path = require('path')
+var cookieParser = require('cookie-parser')
+var logger = require('morgan')
 const querystring = require('querystring')
 const cron = require('node-cron')
 // external modules
@@ -28,7 +29,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-
+app.use(favicon(path.join(__dirname, 'public/images/favicon', 'favicon.ico')));
 app.use('/', indexRouter);
 
 app.get('/users', function(request, resource) {
@@ -57,14 +58,24 @@ app.get('/animes', function(request, resource) {
   })
 })
 
-app.get('/anime/:mediaId', function(request, resource) {
+app.get('/anime/:mediaId', async function(request, resource) {
   var animes = aniDownloader.getData().animes
   const found = animes.find( element => { return element.mediaId == request.params.mediaId });
   if (found) {
-    resource.render('anime', {
-      title: "Anime",
-      anime: found
-    })
+    if (found.noResults || found.isStalled) {
+      // troubles downloading anime, ask user for resolution
+      const resolution = await aniDownloader.getResolutionEntries(found)
+      resource.render('anime', {
+        title: "Anime",
+        anime: found,
+        resolution: resolution
+      })
+    } else {
+      resource.render('anime', {
+        title: "Anime",
+        anime: found
+      })
+    }
   } else {
     resource.send("ERROR: ANIME NOT FOUND") 
   }
@@ -75,10 +86,32 @@ app.get('/help', function(req, res) {
 })
 
 app.post('/set_anime_manual_rule', function(req, res) {
-  let rule = req.body.rule
-  let id = req.body.mediaId
-  aniDownloader.setManualRule(id, rule)
-  aniDownloader.updateAll()
+  const rule = req.body.rule
+  const id = req.body.mediaId
+  const searchTerm = req.body.searchTerm
+
+  const finalRule = searchTerm ? `${searchTerm} "${rule}"` : rule
+  aniDownloader.setManualRule(id, finalRule)
+  res.redirect(`/anime/${id}`)
+})
+
+app.post('/add_anime_manual_download', async function(req, res) {
+  const id = req.body.mediaId
+  const link = req.body.link
+
+  await aniDownloader.addManualDownload(id, link)
+  res.redirect(`/anime/${id}`)
+})
+
+app.post('/reset_anime', function(req, res) {
+  const id = req.body.mediaId
+  aniDownloader.resetAnime(id)
+  res.redirect(`/anime/${id}`)
+})
+
+app.post('/resolve_anime', function(req, res) {
+  const id = req.body.mediaId
+  aniDownloader.resolveAnime(id)
   res.redirect(`/anime/${id}`)
 })
 
